@@ -104,6 +104,8 @@ Vendor deduceVendor(IREE::GPU::TargetAttr target) {
     return Vendor::Apple;
   if (target.isARM())
     return Vendor::ARM;
+  if (target.isBroadcom())
+    return Vendor::Broadcom;
   if (target.isNVIDIA())
     return Vendor::NVIDIA;
   if (target.isQualcomm())
