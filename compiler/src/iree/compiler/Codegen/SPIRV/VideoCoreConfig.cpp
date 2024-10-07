@@ -28,6 +28,119 @@ using CodeGenPipeline =
     mlir::iree_compiler::IREE::Codegen::DispatchLoweringPassPipeline;
 namespace mlir::iree_compiler::detail {
 
+static int64_t findLargestPowerOfTwoMultiple(int64_t dim, int64_t startValue) {
+  if (dim < 0) {
+    return 1;
+  }
+  while (dim % startValue != 0) {
+    startValue >>= 1;
+  }
+  return std::max(startValue, 1ll);
+}
+
+LogicalResult
+setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
+                           std::array<int64_t, 2> bestWorkgroupSizeXY,
+                           std::array<int64_t, 3> bestThreadTileSizeMNK) {
+  LLVM_DEBUG(llvm::dbgs() << "trying to deduce config as matmul...\n");
+  OpOperand *lhs = op.getDpsInputOperand(0);
+  OpOperand *rhs = op.getDpsInputOperand(1);
+
+  auto lhsType = llvm::cast<ShapedType>(lhs->get().getType());
+  auto rhsType = llvm::cast<ShapedType>(rhs->get().getType());
+  auto elementBits =
+      static_cast<int>(IREE::Util::getTypeBitWidth(lhsType.getElementType()));
+  if (!llvm::is_contained({8, 16, 32}, elementBits))
+    return failure();
+
+  ArrayRef<int64_t> lhsShape = lhsType.getShape();
+  ArrayRef<int64_t> rhsShape = rhsType.getShape();
+  if (llvm::any_of(lhsShape, ShapedType::isDynamic))
+    return failure();
+  if (llvm::any_of(rhsShape, ShapedType::isDynamic))
+    return failure();
+
+  assert(llvm::is_contained({2u, 3u}, op.getNumParallelLoops()));
+
+  int lastParallelDim = -1;
+  const auto [bIndex, mIndex, nIndex, kIndex] =
+      getMatmulBMNKIndex(op, &lastParallelDim);
+  if (mIndex < 0 || nIndex < 0 || kIndex < 0)
+    return failure();
+  const bool isBM = bIndex >= 0;
+
+  SmallVector<int64_t> loopRanges = op.getStaticLoopRanges();
+  const unsigned numLoops = loopRanges.size();
+
+  const int64_t dimM = loopRanges[mIndex];
+  const int64_t dimN = loopRanges[nIndex];
+  const int64_t dimK = loopRanges[kIndex];
+
+  // Print out the input settings in debug mode
+  int64_t bestX = bestWorkgroupSizeXY[0], bestY = bestWorkgroupSizeXY[1];
+  LLVM_DEBUG({
+    llvm::dbgs() << "best thread tile size (M, N, K) = ("
+                 << bestThreadTileSizeMNK[0] << ", " << bestThreadTileSizeMNK[1]
+                 << ", " << bestThreadTileSizeMNK[2] << ")\n";
+    llvm::dbgs() << "best workgroup size (X, Y) = (" << bestX << ", " << bestY
+                 << ")\n";
+  });
+
+  // The best workgroup size is around 256 in total. WG_Y <= 16 and WG_X*WG_Y ==
+  // 256. Meaning the workgroup size should be balanced according to the output
+  // shape. Through initial testing the best workgroup size per dimension is at
+  // maximum 16. So we find the largest power of two that is smaller than the
+  // largest dimension for the Y group dimension.
+  SmallVector<int64_t, 3> workgroupSize(3, 1); // (X, Y, Z)
+  workgroupSize[1] = std::min(dimN >> 1, 16ll);
+  workgroupSize[0] =
+      std::min(std::max((bestX * bestY) / workgroupSize[1], 1ll), dimM);
+
+  SmallVector<int64_t> workgroupTileSizes(numLoops, 0);
+  if (isBM)
+    workgroupTileSizes[bIndex] = 1;
+  workgroupTileSizes[mIndex] =
+      findLargestPowerOfTwoMultiple(dimM, workgroupSize[0] * 4);
+  workgroupTileSizes[nIndex] =
+      findLargestPowerOfTwoMultiple(dimN, 1024 / workgroupTileSizes[mIndex]);
+
+  SmallVector<int64_t> threadTileSizes(numLoops, 0);
+  if (isBM) {
+    threadTileSizes[bIndex] = workgroupTileSizes[bIndex] / workgroupSize[2];
+  }
+  threadTileSizes[mIndex] = std::max(workgroupTileSizes[mIndex] / 16, 1ll);
+  threadTileSizes[nIndex] = std::max(workgroupTileSizes[nIndex] / 16, 1ll);
+
+  SmallVector<int64_t> reductionTileSizes(numLoops, 0);
+  int64_t maxVectorization = 32;
+  reductionTileSizes[kIndex] =
+      std::min(findLargestPowerOfTwoMultiple(maxVectorization, dimK), 4ll);
+
+  workgroupTileSizes.resize(lastParallelDim + 1);
+  threadTileSizes.resize(lastParallelDim + 1);
+
+  TileSizesListType tileSizes;
+  llvm::append_values(tileSizes, workgroupTileSizes, threadTileSizes,
+                      reductionTileSizes);
+
+  LLVM_DEBUG({
+    llvm::dbgs() << "workgroup size (X, Y, X) = (" << workgroupSize[0] << ", "
+                 << workgroupSize[1] << ", " << workgroupSize[2] << ")\n";
+    llvm::dbgs() << "workgroup tiling (M, N) = (" << workgroupTileSizes[mIndex]
+                 << ", " << workgroupTileSizes[nIndex] << ")\n";
+    llvm::dbgs() << "thread tiling (M, N) = (" << threadTileSizes[mIndex]
+                 << ", " << threadTileSizes[nIndex] << ")\n";
+    llvm::dbgs() << "reduction tiling (M, N, k) = ("
+                 << reductionTileSizes[mIndex] << ", "
+                 << reductionTileSizes[nIndex] << ','
+                 << reductionTileSizes[kIndex] << ")\n";
+  });
+
+  return setOpConfigAndEntryPointFnTranslation(
+      op->getParentOfType<mlir::FunctionOpInterface>(), op, tileSizes,
+      CodeGenPipeline::SPIRVBaseVectorize, workgroupSize);
+}
+
 static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
                                               IREE::GPU::TargetAttr target) {
   auto inputType =
@@ -39,7 +152,7 @@ static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
   }
   const std::array<int64_t, 2> workgroupXY = {16, 16};
   const std::array<int64_t, 3> threadMNK = {4, 4, 4};
-  return setMatmulOpConfig(target, op, workgroupXY, threadMNK);
+  return setMatmulOpVideoCoreConfig(target, op, workgroupXY, threadMNK);
 }
 
 static int64_t getWorkgroupTiling(int64_t &remainingThreads,
