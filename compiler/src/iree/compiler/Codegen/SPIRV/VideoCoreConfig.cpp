@@ -19,11 +19,11 @@
 namespace mlir::iree_compiler::detail {
 
 static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
-                                           IREE::GPU::TargetAttr target) {
+                                              IREE::GPU::TargetAttr target) {
   auto inputType =
-  llvm::cast<ShapedType>(op.getDpsInputOperand(0)->get().getType());
-  // Restrict the tilings to just float32 as we have not investigated the optimal
-  // tiling for f16 or other types yet.
+      llvm::cast<ShapedType>(op.getDpsInputOperand(0)->get().getType());
+  // Restrict the tilings to just float32 as we have not investigated the
+  // optimal tiling for f16 or other types yet.
   if (!inputType.getElementType().isF32()) {
     return failure();
   }
@@ -37,12 +37,13 @@ static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
 //===----------------------------------------------------------------------===//
 
 LogicalResult setVideoCoreCodeGenConfig(IREE::GPU::TargetAttr target,
-                                     Operation *rootOp) {
+                                        Operation *rootOp) {
   if (!isa<linalg::LinalgOp>(rootOp))
     return failure();
 
   auto linalgOp = cast<linalg::LinalgOp>(rootOp);
-  if (isMatmulOrBatchMatmul(linalgOp) || isa<linalg::MatmulOp>(linalgOp) || isa<linalg::BatchMatmulOp>(linalgOp) ){
+  if (isMatmulOrBatchMatmul(linalgOp) || isa<linalg::MatmulOp>(linalgOp) ||
+      isa<linalg::BatchMatmulOp>(linalgOp)) {
     return setVideoCoreMatmulConfig(linalgOp, target);
   }
 
