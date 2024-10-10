@@ -452,8 +452,13 @@ static std::optional<Value> matchATransposeBMatmul(linalg::LinalgOp matmulOp) {
   if (genericOp && matchInner2DTranspose(genericOp, 2)) {
     return genericOp.getDpsInputOperand(0)->get();
   }
+  auto transposeOp = rhs->get().getDefiningOp<linalg::TransposeOp>();
+  if (transposeOp && matchInner2DTranspose(transposeOp, 2)) {
+    return transposeOp.getDpsInputOperand(0)->get();
+  }
   return std::nullopt;
 }
+
 
 // Method to match a linalg.batch_matmul(a, linalg.transpose(b)). Returns `b` on
 // success.
