@@ -441,6 +441,22 @@ static bool matchInner2DTranspose(linalg::LinalgOp genericOp, unsigned rank) {
   return true;
 }
 
+static bool matchInner2DTranspose(linalg::TransposeOp transposeOp,
+                                  unsigned rank) {
+  if (rank < 2) {
+    return false;
+  }
+
+  auto permutes = transposeOp.getPermutation();
+  if (permutes[0] == rank - 1 && permutes[1] == rank - 2) {
+    return true;
+  }
+  if (permutes[0] == rank - 2 && permutes[1] == rank - 1) {
+    return true;
+  }
+  return false;
+}
+
 // Method to match a linalg.matmul(a, linalg.transpose(b)). Returns `b` on
 // success.
 static std::optional<Value> matchATransposeBMatmul(linalg::LinalgOp matmulOp) {
