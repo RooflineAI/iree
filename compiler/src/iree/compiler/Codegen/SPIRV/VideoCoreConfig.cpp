@@ -28,6 +28,145 @@ using CodeGenPipeline =
     mlir::iree_compiler::IREE::Codegen::DispatchLoweringPassPipeline;
 namespace mlir::iree_compiler::detail {
 
+static int64_t findLargestPowerOfTwoMultiple(int64_t dim, int64_t startValue) {
+  if (dim < 0) {
+    return 1;
+  }
+  while (dim % startValue != 0) {
+    startValue >>= 1;
+  }
+  return std::max(startValue, 1ll);
+}
+
+LogicalResult
+setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
+                           std::array<int64_t, 2> bestWorkgroupSizeXY,
+                           std::array<int64_t, 3> bestThreadTileSizeMNK) {
+  LLVM_DEBUG(llvm::dbgs() << "trying to deduce config as matmul...\n");
+  OpOperand *lhs = op.getDpsInputOperand(0);
+  OpOperand *rhs = op.getDpsInputOperand(1);
+
+  // The following tiling heuristic will ignore any operations that do not
+  // have statically known shapes.
+  auto lhsType = llvm::cast<ShapedType>(lhs->get().getType());
+  auto rhsType = llvm::cast<ShapedType>(rhs->get().getType());
+  auto elementBits =
+      static_cast<int>(IREE::Util::getTypeBitWidth(lhsType.getElementType()));
+  if (!llvm::is_contained({8, 16, 32}, elementBits))
+    return failure();
+
+  ArrayRef<int64_t> lhsShape = lhsType.getShape();
+  ArrayRef<int64_t> rhsShape = rhsType.getShape();
+  if (llvm::any_of(lhsShape, ShapedType::isDynamic))
+    return failure();
+  if (llvm::any_of(rhsShape, ShapedType::isDynamic))
+    return failure();
+
+  // Ensure that we only focus on batch matmuls or single matmuls, i.e. 2D or 3D
+  assert(llvm::is_contained({2u, 3u}, op.getNumParallelLoops()));
+
+  // Examine the linalg operation and find the indexes for the dimensions B, N,
+  // M, K. Remember the operation we are tiling is: (Bx)NxM * (Bx)MxK = (Bx)NxK
+  int lastParallelDim = -1;
+  const auto [bIndex, mIndex, nIndex, kIndex] =
+      getMatmulBMNKIndex(op, &lastParallelDim);
+  if (mIndex < 0 || nIndex < 0 || kIndex < 0)
+    return failure();
+  const bool isBM = bIndex >= 0;
+
+  // Get all the dimension sizes that we need for tiling.
+  SmallVector<int64_t> loopRanges = op.getStaticLoopRanges();
+  const unsigned numLoops = loopRanges.size();
+  const int64_t dimM = loopRanges[mIndex];
+  const int64_t dimN = loopRanges[nIndex];
+  const int64_t dimK = loopRanges[kIndex];
+
+  // Print out the input settings in debug mode
+  int64_t bestX = bestWorkgroupSizeXY[0], bestY = bestWorkgroupSizeXY[1];
+  LLVM_DEBUG({
+    llvm::dbgs() << "best thread tile size (M, N, K) = ("
+                 << bestThreadTileSizeMNK[0] << ", " << bestThreadTileSizeMNK[1]
+                 << ", " << bestThreadTileSizeMNK[2] << ")\n";
+    llvm::dbgs() << "best workgroup size (X, Y) = (" << bestX << ", " << bestY
+                 << ")\n";
+  });
+
+  // The best workgroup size is around 256 threads in total.
+  // Where the relationship of WG_Y <= 16 and WG_X*WG_Y == 256 seems to yield
+  // the best result. Meaning the workgroup size should be balanced according to
+  // the output shape. Through initial testing the best workgroup size per
+  // dimension is at maximum 16. So we find the largest power of two that is
+  // smaller than the largest dimension for the Y group dimension.
+  SmallVector<int64_t, 3> workgroupSize(3, 1); // (X, Y, Z)
+  workgroupSize[1] = std::min(dimN >> 1, 16ll);
+  workgroupSize[0] =
+      std::min(std::max((bestX * bestY) / workgroupSize[1], 1ll), dimM);
+
+  SmallVector<int64_t> workgroupTileSizes(numLoops, 0);
+  // Batch is simply tiled to 1 for now. Could be improved if batch is
+  // large and the spatial dimensions are small compared to the amount
+  // of available threads.
+  if (isBM)
+    workgroupTileSizes[bIndex] = 1;
+  // Remember: NxM * M*K and we want to maximize the number of elements we load
+  // sequentially, so we maximize the number of output elements in the M
+  // dimension. And the the rest (from a total of 1024) is given to the N
+  // dimension.
+  workgroupTileSizes[mIndex] =
+      findLargestPowerOfTwoMultiple(dimM, workgroupSize[0] * 4);
+  workgroupTileSizes[nIndex] =
+      findLargestPowerOfTwoMultiple(dimN, 1024 / workgroupTileSizes[mIndex]);
+
+  // Thread Tiling
+  SmallVector<int64_t> threadTileSizes(numLoops, 0);
+  // Batch is simply tiled to 1 for now. Remember workgroup is 1 and tile size
+  // is 1
+  if (isBM) {
+    threadTileSizes[bIndex] = workgroupTileSizes[bIndex] / workgroupSize[2];
+  }
+  // Each thread is given 1/16th of what the workgroup was given. Which should
+  // be skewed in favour of the M dimension to allow for coalesced memory
+  // accesses.
+  threadTileSizes[mIndex] = std::max(workgroupTileSizes[mIndex] / 16, 1ll);
+  threadTileSizes[nIndex] = std::max(workgroupTileSizes[nIndex] / 16, 1ll);
+
+  // The reduction tiling performs the vector multiply addition and determines
+  // the size of the vector operation performed within the inner loop. With a
+  // maximum of 32 elements per vector operation we see if it is a exact
+  // multiple of the dimension K. If not, we use the next smaller power-of-two
+  // value until one works with a minimum vectorization of 4 elements.
+  SmallVector<int64_t> reductionTileSizes(numLoops, 0);
+  int64_t maxVectorization = 32;
+  reductionTileSizes[kIndex] =
+      std::min(findLargestPowerOfTwoMultiple(maxVectorization, dimK), 4ll);
+
+  workgroupTileSizes.resize(lastParallelDim + 1);
+  threadTileSizes.resize(lastParallelDim + 1);
+
+  TileSizesListType tileSizes;
+  llvm::append_values(tileSizes, workgroupTileSizes, threadTileSizes,
+                      reductionTileSizes);
+
+  LLVM_DEBUG({
+    llvm::dbgs() << "workgroup size (X, Y, X) = (" << workgroupSize[0] << ", "
+                 << workgroupSize[1] << ", " << workgroupSize[2] << ")\n";
+    llvm::dbgs() << "workgroup tiling (M, N) = (" << workgroupTileSizes[mIndex]
+                 << ", " << workgroupTileSizes[nIndex] << ")\n";
+    llvm::dbgs() << "thread tiling (M, N) = (" << threadTileSizes[mIndex]
+                 << ", " << threadTileSizes[nIndex] << ")\n";
+    llvm::dbgs() << "reduction tiling (M, N, k) = ("
+                 << reductionTileSizes[mIndex] << ", "
+                 << reductionTileSizes[nIndex] << ','
+                 << reductionTileSizes[kIndex] << ")\n";
+  });
+
+  // Sets the workgroup size on the dispatch function and adds the tiling for
+  // the MatMul to the corresponding linalg operation.
+  return setOpConfigAndEntryPointFnTranslation(
+      op->getParentOfType<mlir::FunctionOpInterface>(), op, tileSizes,
+      CodeGenPipeline::SPIRVBaseVectorize, workgroupSize);
+}
+
 static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
                                               IREE::GPU::TargetAttr target) {
   auto inputType =
@@ -39,7 +178,7 @@ static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
   }
   const std::array<int64_t, 2> workgroupXY = {16, 16};
   const std::array<int64_t, 3> threadMNK = {4, 4, 4};
-  return setMatmulOpConfig(target, op, workgroupXY, threadMNK);
+  return setMatmulOpVideoCoreConfig(target, op, workgroupXY, threadMNK);
 }
 
 static int64_t getWorkgroupTiling(int64_t &remainingThreads,
