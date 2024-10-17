@@ -176,8 +176,15 @@ ConstExprAnalysis::ConstExprAnalysis(Operation *rootOp)
         for (auto &use : definingOp->getUses()) {
           Operation *useOp = use.getOwner();
           // Skip expanding of ops within dispatch or nested regions.
-          if (definingOp->getParentOp() != useOp->getParentOp())
+          if (definingOp->getParentOp() != useOp->getParentOp()) {
+
+            if (auto parentOp = useOp->getParentOp()) {
+              if (definingOp->getParentOp() == parentOp->getParentOp()) {
+                expandToOp(parentOp);
+              }
+            }
             continue;
+          }
           expandToOp(useOp);
         }
       }
@@ -466,7 +473,6 @@ void ConstExprHoistingPolicy::makeDecision(
       Decision *consumerDecision = getDecision(consumerInfo);
       if (consumerDecision->getOutcome() != DISABLE_HOIST)
         continue;
-
       Operation *consumerOp = consumerInfo->getOperation();
       OpOperand *consumerOperand = findOperandFor(consumerOp, info->constValue);
       if (!consumerOperand) {
