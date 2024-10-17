@@ -755,8 +755,9 @@ TargetAttr getVulkanTargetDetails(llvm::StringRef target,
   if (std::optional<TargetDetails> details = getARMGPUTargetDetails(target)) {
     return createTargetAttr(*details, normalizeARMGPUTarget(target),
                             /*features=*/"spirv:v1.4,cap:Shader", context);
-  }  
-  if (std::optional<TargetDetails> details = getBroadcomProfileDetails(target)) {
+  }
+  if (std::optional<TargetDetails> details =
+          getBroadcomProfileDetails(target)) {
     return createTargetAttr(*details, target,
                             /*features=*/"spirv:v1.3,cap:Shader", context);
   }
