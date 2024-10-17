@@ -181,15 +181,6 @@ static LogicalResult setVideoCoreMatmulConfig(linalg::LinalgOp op,
   return setMatmulOpVideoCoreConfig(target, op, workgroupXY, threadMNK);
 }
 
-static int64_t getWorkgroupTiling(int64_t &remainingThreads,
-                                  int64_t dimensionSize) {
-  // Find the largest power of two value that can evenly divide the dimension
-  // and take that away from the pool of available threads.
-  auto result = dimensionSize & (~(dimensionSize - 1));
-  remainingThreads = std::max(result / remainingThreads, 1ll);
-  return result;
-}
-
 static LogicalResult setConvOpForVideoCoreConfig(linalg::LinalgOp op,
                                                  int64_t threadsPerWorkGroup,
                                                  int64_t optimalThreadTiling) {
@@ -274,10 +265,12 @@ static LogicalResult setConvOpForVideoCoreConfig(linalg::LinalgOp op,
   // need generally the same row from the input tensor when calculating their
   // output. Generating a sequential access pattern.
   SmallVector<int64_t> workgroupTiling(4, 1); // (N, OC, OH, OW)
-  workgroupTiling[3] = getWorkgroupTiling(threadsPerWorkGroup, ow);
-  workgroupTiling[2] = getWorkgroupTiling(threadsPerWorkGroup, oh);
+  workgroupTiling[3] = findLargestPowerOfTwoMultiple(ow, threadsPerWorkGroup);
+  threadsPerWorkGroup = threadsPerWorkGroup - workgroupTiling[3];
+  workgroupTiling[2] = findLargestPowerOfTwoMultiple(oh, threadsPerWorkGroup);
+  threadsPerWorkGroup = threadsPerWorkGroup - workgroupTiling[2];
   workgroupTiling[1] =
-      getWorkgroupTiling(threadsPerWorkGroup, outputChannelSize);
+      findLargestPowerOfTwoMultiple(outputChannelSize, threadsPerWorkGroup);
   tileSizes.push_back(workgroupTiling);
 
   // Remember OC->Z, OW->Y and OH->X
@@ -347,7 +340,7 @@ LogicalResult setVideoCoreCodeGenConfig(IREE::GPU::TargetAttr target,
   //   return setConvOpConfig(cast<linalg::LinalgOp>(rootOp), 256, 4));
   // }
 
-  // With this heuristic we get around 3.2s with ResNet18 on the RPI5 GPU
+  // With this heuristic we get around 2.4s with ResNet18 on the RPI5 GPU
   if (auto convOp = dyn_cast<linalg::ConvolutionOpInterface>(rootOp)) {
     return setConvOpForVideoCoreConfig(cast<linalg::LinalgOp>(rootOp), 256, 4);
   }
