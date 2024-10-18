@@ -35,7 +35,7 @@ static int64_t findLargestPowerOfTwoMultiple(int64_t dim, int64_t startValue) {
   while (dim % startValue != 0) {
     startValue >>= 1;
   }
-  return std::max(startValue, 1ll);
+  return std::max(startValue, int64_t(1));
 }
 
 LogicalResult
@@ -98,9 +98,9 @@ setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
   // dimension is at maximum 16. So we find the largest power of two that is
   // smaller than the largest dimension for the Y group dimension.
   SmallVector<int64_t, 3> workgroupSize(3, 1); // (X, Y, Z)
-  workgroupSize[1] = std::min(dimN >> 1, 16ll);
+  workgroupSize[1] = std::min(dimN >> 1, int64_t(16));
   workgroupSize[0] =
-      std::min(std::max((bestX * bestY) / workgroupSize[1], 1ll), dimM);
+      std::min(std::max((bestX * bestY) / workgroupSize[1], int64_t(1)), dimM);
 
   SmallVector<int64_t> workgroupTileSizes(numLoops, 0);
   // Batch is simply tiled to 1 for now. Could be improved if batch is
@@ -127,8 +127,8 @@ setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
   // Each thread is given 1/16th of what the workgroup was given. Which should
   // be skewed in favour of the M dimension to allow for coalesced memory
   // accesses.
-  threadTileSizes[mIndex] = std::max(workgroupTileSizes[mIndex] / 16, 1ll);
-  threadTileSizes[nIndex] = std::max(workgroupTileSizes[nIndex] / 16, 1ll);
+  threadTileSizes[mIndex] = std::max(workgroupTileSizes[mIndex] / 16, int64_t(1));
+  threadTileSizes[nIndex] = std::max(workgroupTileSizes[nIndex] / 16, int64_t(1));
 
   // The reduction tiling performs the vector multiply addition and determines
   // the size of the vector operation performed within the inner loop. With a
@@ -138,7 +138,7 @@ setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
   SmallVector<int64_t> reductionTileSizes(numLoops, 0);
   int64_t maxVectorization = 32;
   reductionTileSizes[kIndex] =
-      std::min(findLargestPowerOfTwoMultiple(maxVectorization, dimK), 4ll);
+      std::min(findLargestPowerOfTwoMultiple(maxVectorization, dimK), int64_t(4));
 
   workgroupTileSizes.resize(lastParallelDim + 1);
   threadTileSizes.resize(lastParallelDim + 1);
@@ -281,9 +281,9 @@ static LogicalResult setConvOpForVideoCoreConfig(linalg::LinalgOp op,
   // This configuration seems to work best for the GPU. There is no concrete
   // reasoning behind it.
   SmallVector<int64_t, 3> workgroupSize(3, 1); // (X, Y, Z)
-  workgroupSize[0] = std::max(workgroupTiling[3] / 4, 1ll);
+  workgroupSize[0] = std::max(workgroupTiling[3] / 4, int64_t(1));
   workgroupSize[1] = workgroupTiling[2];
-  workgroupSize[2] = std::max(workgroupTiling[1] / 4, 1ll);
+  workgroupSize[2] = std::max(workgroupTiling[1] / 4, int64_t(1));
 
   // For each thread we want to maximize the number of output elements in OW
   // that each thread calculates. That is why we do not calculate the output
