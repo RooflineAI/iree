@@ -90,7 +90,7 @@ static llvm::cl::opt<bool> clEnableDataTiling(
                    "experimental path. The current main data tiling path is "
                    "iree-opt-data-tiling, which is on by default. To use this "
                    "path, --iree-opt-data-tiling=false must be set as wells"),
-    llvm::cl::init(false));
+    llvm::cl::init(true));
 
 namespace mlir::iree_compiler::DispatchCreation {
 

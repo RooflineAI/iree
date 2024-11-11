@@ -180,7 +180,7 @@ struct LLVMCPUTargetCLOptions {
   std::string targetTriple;
   std::string targetCPU;
   std::string loggingUnspecifiedTargetCPU;
-  std::string targetCPUFeatures;
+  std::string targetCPUFeatures = "host";
   bool linkEmbedded = LLVMTarget::DEFAULT_LINK_EMBEDDED;
   bool linkStatic = LLVMTarget::DEFAULT_LINK_STATIC;
   std::string staticLibraryOutputPath;
@@ -194,7 +194,7 @@ struct LLVMCPUTargetCLOptions {
   llvm::FloatABI::ABIType targetFloatABI = LLVMTarget::DEFAULT_FLOAT_ABI;
   std::string targetDataLayout = LLVMTarget::DEFAULT_DATA_LAYOUT;
   unsigned targetVectorWidthInBytes = LLVMTarget::DEFAULT_VECTOR_WIDTH_IN_BYTES;
-  std::string enableUkernels = LLVMTarget::DEFAULT_ENABLE_UKERNELS;
+  std::string enableUkernels = "all";
   bool linkUKernelBitcode = LLVMTarget::DEFAULT_LINK_UKERNEL_BITCODE;
   bool listTargets; // Ignored - used with llvm::cl::ValueDisallowed.
 
