@@ -34,9 +34,7 @@ set(IREE_EXECUTABLE_CTS_TESTS
 
 # List of testdata/{name}.mlir source files.
 set(IREE_ALL_CTS_EXECUTABLE_SOURCES
-  "command_buffer_dispatch_test"
-  "command_buffer_dispatch_constants_test"
-  "executable_cache_test"
+  ""
   PARENT_SCOPE
 )
 

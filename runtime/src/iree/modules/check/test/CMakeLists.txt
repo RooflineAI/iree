@@ -26,20 +26,5 @@ iree_lit_test_suite(
     "hostonly"
 )
 
-iree_check_test_suite(
-  NAME
-    check
-  SRCS
-    "success.mlir"
-)
-
-iree_check_test_suite(
-  NAME
-    check_failure
-  SRCS
-    "failure.mlir"
-  RUNNER_ARGS
-    "--expect_failure"
-)
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

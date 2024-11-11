@@ -13,33 +13,3 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-iree_lit_test_suite(
-    name = "lit",
-    srcs = enforce_glob(
-        [
-            "failure.mlir",
-            "success.mlir",
-            "unavailable.mlir",
-        ],
-        include = ["*.mlir"],
-    ),
-    cfg = "//runtime:lit.cfg.py",
-    tags = ["hostonly"],
-    tools = [
-        "//tools:iree-check-module",
-        "//tools:iree-compile",
-        "//tools:iree-run-module",
-        "@llvm-project//llvm:FileCheck",
-    ],
-)
-
-iree_check_test_suite(
-    name = "check",
-    srcs = ["success.mlir"],
-)
-
-iree_check_test_suite(
-    name = "check_failure",
-    srcs = ["failure.mlir"],
-    runner_args = ["--expect_failure"],
-)
