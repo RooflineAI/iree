@@ -14,6 +14,7 @@
 #include <cstdint>
 
 #include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenAttrs.h"
+#include "iree/compiler/Dialect/Util/IR/UtilTypes.h"
 #include "iree/compiler/Codegen/SPIRV/KernelConfig.h"
 
 #include "llvm/ADT/SmallVector.h"
