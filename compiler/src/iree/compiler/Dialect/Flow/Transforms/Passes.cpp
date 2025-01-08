@@ -221,9 +221,19 @@ void buildFlowTransformPassPipeline(OpPassManager &passManager,
 
   // Cleanup executable contents.
   {
-    auto executablePassManager = passManager.nest<IREE::Flow::ExecutableOp>();
-    executablePassManager.addPass(IREE::Flow::createCanonicalizerPass());
-    executablePassManager.addPass(mlir::createCSEPass());
+    passManager.addNestedPass<IREE::Flow::ExecutableOp>(
+        IREE::Flow::createCanonicalizerPass());
+    passManager.addNestedPass<IREE::Flow::ExecutableOp>(
+        mlir::createCSEPass());
+
+    /* [OLD] Added: --> Here it breaks: flow.executable(): Assumption: In generall, this is correct 
+    but passManager.nest<IREE::Flow::ExecutableOp>() creates the flow.executable() in the pipeline string which should not be there. 
+    But it can also be that the passes are not added correctly, but then the scope doesn't make sense. <-- */
+
+    //Original:
+    //auto executablePassManager = passManager.nest<IREE::Flow::ExecutableOp>();
+    //executablePassManager.addPass(IREE::Flow::createCanonicalizerPass()); 
+    //executablePassManager.addPass(mlir::createCSEPass());
   }
 
   // Symbol DCE any remaining variables/functions that are now no longer

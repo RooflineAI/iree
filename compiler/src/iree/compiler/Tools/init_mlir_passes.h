@@ -16,6 +16,7 @@
 
 #include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Affine/Passes.h"
+#include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/ArmSME/Transforms/Passes.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
@@ -23,6 +24,7 @@
 #include "mlir/Dialect/SCF/Transforms/Passes.h"
 #include "mlir/Dialect/SPIRV/Transforms/Passes.h"
 #include "mlir/Dialect/Shape/Transforms/Passes.h"
+#include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Dialect/Transform/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
 
@@ -72,6 +74,20 @@ inline void registerMlirPasses() {
   registerSCFParallelLoopFusionPass();
   registerSCFParallelLoopTilingPass();
   registerSCFToControlFlowPass();
+  
+  //Added
+  registerTosaToMLProgram();
+  registerTosaToSCF();
+  registerTosaToLinalgNamed();
+  registerTosaToTensor();
+  registerTosaToArith();
+  tosa::registerTosaValidationPass();
+  tosa::registerTosaLayerwiseConstantFoldPass();
+  tosa::registerTosaInferShapesPass();
+  tosa::registerTosaOptionalDecompositionsPass();
+  tosa::registerTosaMakeBroadcastablePass();
+  registerSCFForLoopCanonicalization();
+  arith::registerArithUnsignedWhenEquivalentPass();
 
   // Shape
   registerShapePasses();
