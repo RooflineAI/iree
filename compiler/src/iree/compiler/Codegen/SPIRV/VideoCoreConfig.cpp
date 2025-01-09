@@ -14,8 +14,8 @@
 #include <cstdint>
 
 #include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenAttrs.h"
-#include "iree/compiler/Dialect/Util/IR/UtilTypes.h"
 #include "iree/compiler/Codegen/SPIRV/KernelConfig.h"
+#include "iree/compiler/Dialect/Util/IR/UtilTypes.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
@@ -128,8 +128,10 @@ setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
   // Each thread is given 1/16th of what the workgroup was given. Which should
   // be skewed in favour of the M dimension to allow for coalesced memory
   // accesses.
-  threadTileSizes[mIndex] = std::max(workgroupTileSizes[mIndex] / 16, int64_t(1));
-  threadTileSizes[nIndex] = std::max(workgroupTileSizes[nIndex] / 16, int64_t(1));
+  threadTileSizes[mIndex] =
+      std::max(workgroupTileSizes[mIndex] / 16, int64_t(1));
+  threadTileSizes[nIndex] =
+      std::max(workgroupTileSizes[nIndex] / 16, int64_t(1));
 
   // The reduction tiling performs the vector multiply addition and determines
   // the size of the vector operation performed within the inner loop. With a
@@ -138,8 +140,8 @@ setMatmulOpVideoCoreConfig(IREE::GPU::TargetAttr target, linalg::LinalgOp op,
   // value until one works with a minimum vectorization of 4 elements.
   SmallVector<int64_t> reductionTileSizes(numLoops, 0);
   int64_t maxVectorization = 32;
-  reductionTileSizes[kIndex] =
-      std::min(findLargestPowerOfTwoMultiple(maxVectorization, dimK), int64_t(4));
+  reductionTileSizes[kIndex] = std::min(
+      findLargestPowerOfTwoMultiple(maxVectorization, dimK), int64_t(4));
 
   workgroupTileSizes.resize(lastParallelDim + 1);
   threadTileSizes.resize(lastParallelDim + 1);
