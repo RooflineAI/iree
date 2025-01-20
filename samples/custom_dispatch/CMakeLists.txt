@@ -5,3 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 iree_add_all_subdirs()
+# iree_add_all_subdirs()
+#TODO: CUDA breaks with 'python runner.py configure'
+add_subdirectory(cpu)
+add_subdirectory(hip)
+add_subdirectory(vulkan)
