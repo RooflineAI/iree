@@ -316,7 +316,7 @@ def build_configuration(cmake_build_dir, cmake_install_dir, extra_cmake_args=())
             ),
             get_env_cmake_option(
                 "IREE_HAL_DRIVER_CUDA",
-                "OFF",
+                "ON",
             ),
             get_env_cmake_option(
                 "IREE_HAL_DRIVER_HIP",
