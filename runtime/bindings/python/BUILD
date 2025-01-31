@@ -1,0 +1,97 @@
+py_library(
+    name = "runtime_files",
+    srcs = glob(["iree/**/*.py"]),
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "numpy_headers",
+    hdrs = [
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/__multiarray_api.c",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/__multiarray_api.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/__ufunc_api.c",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/__ufunc_api.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/_neighborhood_iterator_imp.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/_numpyconfig.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/_public_dtype_api_table.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/arrayobject.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/arrayscalars.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/dtype_api.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/halffloat.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/ndarrayobject.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/ndarraytypes.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_1_7_deprecated_api.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_2_compat.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_2_complexcompat.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_3kcompat.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_common.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_cpu.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_endian.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_math.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_no_deprecated_api.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_os.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/numpyconfig.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/random/bitgen.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/random/distributions.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/random/libdivide.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/ufuncobject.h",
+        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/utils.h",
+    ],
+)
+
+# These flags are needed for pybind11 to work.
+PYBIND11_COPTS = [
+    "-fexceptions",
+    "-frtti",
+]
+
+PYBIND11_FEATURES = [
+    # Cannot use header_modules (parse_headers feature fails).
+    "-use_header_modules",
+]
+
+cc_library(
+    name = "bindings_python",
+    srcs = glob(["**/*.cc"], exclude=["initialize_model.cc"]),
+    hdrs = glob(["**/*.h"]),
+    copts = ["-Iexternal/pypi_numpy/site-packages/numpy/_core/include"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+    deps = [
+        "numpy_headers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:flags",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers",
+        "//runtime/src/iree/hal/utils:allocators",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:parameter_index",
+        "//runtime/src/iree/io:parameter_index_provider",
+        "//runtime/src/iree/io:parameter_provider",
+        "//runtime/src/iree/io/formats:parser_registry",
+        "//runtime/src/iree/io/formats/irpa",
+        "//runtime/src/iree/modules/hal",
+        "//runtime/src/iree/modules/io/parameters",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/tooling/modules",
+        "//runtime/src/iree/vm",
+        "//runtime/src/iree/vm/bytecode:module",
+        "@nanobind",
+        "@rules_python//python/cc:current_py_cc_headers",
+    ],
+)
+
+cc_binary(
+    name="_runtime.so",
+    srcs = ["initialize_module.cc"],
+    copts = PYBIND11_COPTS,
+    features = PYBIND11_FEATURES,
+    includes = ["runtime/bindings/python"],
+    linkshared = 1,
+    linkstatic = 0,
+    deps = [
+        ":bindings_python",
+        "@nanobind"
+    ],
+    visibility = ["//visibility:public"],
+)
