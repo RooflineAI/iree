@@ -433,6 +433,23 @@ StringRef normalizeARMGPUTarget(StringRef target) {
 // cooperative matrix layouts are opaque. We need to create NVIDIA specific WMMA
 // intrinsics if we need to have explicit layout analysis and register mapping.
 
+const WgpDetails *getAdaWgpDetails() {
+  static const MMAIntrinsic mmaOps[] = {MMAIntrinsic::WMMA_F32_16x16x16_F16,
+                                        MMAIntrinsic::WMMA_F16_16x16x16_F16};
+  static const WgpDetails adaWgp = {allComputeBits,
+                                    allStorageBits,
+                                    allSubgroupOps,
+                                    allDotProductOps,
+                                    ARRAY_SIZE(mmaOps),
+                                    mmaOps,
+                                    {32, 32},
+                                    {1024, 1024, 1024},
+                                    1024,
+                                    128 * 1024,
+                                    {0x7fffffff, 0xffff, 0xffff}};
+  return &adaWgp;
+}
+
 const WgpDetails *getAmpereWgpDetails() {
   static const MMAIntrinsic mmaOps[] = {
       MMAIntrinsic::WMMA_F32_16x16x16_F16,
@@ -498,12 +515,18 @@ const WgpDetails *getPascalWgpDetails() {
 }
 
 std::optional<TargetDetails> getNVIDIAGPUTargetDetails(StringRef target) {
+  const WgpDetails *adaWgp = getAdaWgpDetails();
   const WgpDetails *ampereWgp = getAmpereWgpDetails();
   const WgpDetails *turingWgp = getTuringWgpDetails();
   const WgpDetails *voltaWgp = getVoltaWgpDetails();
   const WgpDetails *pascalWgp = getPascalWgpDetails();
 
   static const ChipDetails a100Chip = {108};
+  static const ChipDetails rtx4090Chip = {144};
+  static const ChipDetails rtx4080Chip = {84};
+  static const ChipDetails rtx4070Chip = {60};
+  static const ChipDetails rtx4060Chip = {36};
+  static const ChipDetails rtx4050Chip = {24};
   static const ChipDetails rtx3090tiChip = {84};
   static const ChipDetails rtx3090Chip = {82};
   static const ChipDetails rtx3080tiChip = {80};
@@ -529,8 +552,19 @@ std::optional<TargetDetails> getNVIDIAGPUTargetDetails(StringRef target) {
       .Case("rtx3070ti", TargetDetails{ampereWgp, &rtx3070tiChip})
       // https://www.techpowerup.com/gpu-specs/geforce-rtx-3070.c3674
       .Case("rtx3070", TargetDetails{ampereWgp, &rtx3070Chip})
+      // https://www.techpowerup.com/gpu-specs/nvidia-ad107.g1015
+      .Case("rtx4050", TargetDetails{adaWgp, &rtx4050Chip})
+      // https://www.techpowerup.com/gpu-specs/nvidia-ad106.g1014
+      .Case("rtx4060", TargetDetails{adaWgp, &rtx4060Chip})
+      // https://www.techpowerup.com/gpu-specs/nvidia-ad104.g1013
+      .Case("rtx4070", TargetDetails{adaWgp, &rtx4070Chip})
+      // https://www.techpowerup.com/gpu-specs/nvidia-ad103.g1012
+      .Case("rtx4080", TargetDetails{adaWgp, &rtx4080Chip})
+      // https://www.techpowerup.com/gpu-specs/nvidia-ad102.g1005
+      .Case("rtx4090", TargetDetails{adaWgp, &rtx4090Chip})
       .Cases("ampere", "sm_80", "sm_86", "sm_87",
              TargetDetails{ampereWgp, nullptr})
+      .Cases("ada", "sm_89", TargetDetails{adaWgp, &rtx4090Chip})
       .Cases("turing", "sm_75", TargetDetails{turingWgp, nullptr})
       .Cases("volta", "sm_70", "sm_72", TargetDetails{voltaWgp, nullptr})
       .Cases("pascal", "sm_60", "sm_61", "sm_62",
@@ -550,6 +584,7 @@ StringRef normalizeNVIDIAGPUTarget(StringRef target) {
     return "sm_75";
 
   return llvm::StringSwitch<StringRef>(target.lower())
+      .Case("ada", "sm_89")
       .Case("a100", "sm_80")
       .Case("ampere", "sm_80") // Or sm_86/87; use smaller version
       .Case("turing", "sm_75")
