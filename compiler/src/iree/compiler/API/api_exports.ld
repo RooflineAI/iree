@@ -73,10 +73,10 @@ VER_0 {
     ireeCompilerSourceWrapBuffer;
     ireeGPULoweringConfigAttrGet;
     ireeGPULoweringConfigAttrGetAttributes;
-    ireeGPULoweringConfigAttrGetTypeID;
-    ireeGPULoweringConfigAttrGetTileSizes;
-    ireeGPULoweringConfigAttrGetSubgroupCount;
     ireeGPULoweringConfigAttrGetMmaKind;
+    ireeGPULoweringConfigAttrGetSubgroupCount;
+    ireeGPULoweringConfigAttrGetTileSizes;
+    ireeGPULoweringConfigAttrGetTypeID;
     ireeGPUMMAAttrGet;
     ireeGPUMMAAttrGetInfo;
     ireeGPUMMAAttrGetTypeID;
@@ -276,6 +276,7 @@ VER_0 {
     mlirDenseElementsAttrGetDoubleValue;
     mlirDenseElementsAttrGetFloatSplatValue;
     mlirDenseElementsAttrGetFloatValue;
+    mlirDenseElementsAttrGetIndexValue;
     mlirDenseElementsAttrGetInt16Value;
     mlirDenseElementsAttrGetInt32SplatValue;
     mlirDenseElementsAttrGetInt32Value;
@@ -467,6 +468,7 @@ VER_0 {
     mlirIsCurrentDebugType;
     mlirIsGlobalDebugEnabled;
     mlirLLVMArrayTypeGet;
+    mlirLLVMArrayTypeGetElementType;
     mlirLLVMCConvAttrGet;
     mlirLLVMComdatAttrGet;
     mlirLLVMDIAnnotationAttrGet;
@@ -498,6 +500,9 @@ VER_0 {
     mlirLLVMDISubprogramAttrGetType;
     mlirLLVMDISubroutineTypeAttrGet;
     mlirLLVMFunctionTypeGet;
+    mlirLLVMFunctionTypeGetInput;
+    mlirLLVMFunctionTypeGetNumInputs;
+    mlirLLVMFunctionTypeGetReturnType;
     mlirLLVMLinkageAttrGet;
     mlirLLVMPointerTypeGet;
     mlirLLVMPointerTypeGetAddressSpace;
@@ -520,6 +525,7 @@ VER_0 {
     mlirLocationCallSiteGet;
     mlirLocationEqual;
     mlirLocationFileLineColGet;
+    mlirLocationFileLineColRangeGet;
     mlirLocationFromAttribute;
     mlirLocationFusedGet;
     mlirLocationGetAttribute;
@@ -539,6 +545,7 @@ VER_0 {
     mlirMergeSymbolsIntoFromClone;
     mlirModuleCreateEmpty;
     mlirModuleCreateParse;
+    mlirModuleCreateParseFromFile;
     mlirModuleDestroy;
     mlirModuleFromOperation;
     mlirModuleGetBody;
@@ -856,6 +863,7 @@ VER_0 {
     mlirValueIsAOpResult;
     mlirValuePrint;
     mlirValuePrintAsOperand;
+    mlirValueReplaceAllUsesExcept;
     mlirValueReplaceAllUsesOfWith;
     mlirValueSetType;
     mlirVectorTypeGet;

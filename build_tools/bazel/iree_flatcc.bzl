@@ -17,7 +17,7 @@ def iree_flatbuffer_c_library(
 
     flags = [
         "-o$(RULEDIR)",
-        "-I runtime/src",
+        "-I $(WORKSPACE_ROOT)/runtime/src",
     ] + flatcc_args
 
     out_stem = "%s" % (srcs[0].replace(".fbs", ""))
@@ -41,6 +41,7 @@ def iree_flatbuffer_c_library(
         tools = [flatcc],
         cmd = "$(location %s) %s %s" % (flatcc, " ".join(flags), " ".join(["$(location {})".format(src) for src in srcs])),
         testonly = testonly,
+        toolchains = ["//:workspace_root"]
     )
     native.cc_library(
         name = name,

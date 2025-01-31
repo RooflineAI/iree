@@ -84,7 +84,7 @@ def iree_compiler_cc_library(deps = [], **kwargs):
     """
     iree_cc_library(
         deps = deps + [
-            "//compiler/src:defs",
+            "@iree//compiler/src:defs",
         ],
         **kwargs
     )
@@ -117,7 +117,7 @@ def iree_compiler_cc_binary(deps = [], **kwargs):
     """
     native.cc_binary(
         deps = deps + [
-            "//compiler/src:defs",
+            "@iree//compiler/src:defs",
         ],
         **kwargs
     )

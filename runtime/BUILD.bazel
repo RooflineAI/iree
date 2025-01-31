@@ -4,6 +4,9 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@rules_python//python:packaging.bzl", "py_package", "py_wheel")
+load("//build_tools/bazel:iree_copy_to_path.bzl", "copy_to_path", "tracy_copy_to_path")
+
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
@@ -11,3 +14,249 @@ package(
 )
 
 exports_files(["lit.cfg.py"])
+exports_files(glob(["bindings/python/iree/**/*"]))
+
+
+py_library(
+    name = "runtime_python",
+    srcs = ["//runtime/bindings/python:runtime_files"],
+)
+
+runtime_libs_path = "iree/_runtime_libs"
+
+copy_to_path(
+    name = "prepare_runtime_so",
+    src = "//runtime/bindings/python:_runtime.so",
+    file_name = "_runtime.so",
+    output_dir = runtime_libs_path,
+)
+
+py_library(
+    name = "bindings",
+    data = [":prepare_runtime_so"],
+    imports = ["iree"],
+)
+
+copy_to_path(
+    name = "iree_benchmark_executable_lib",
+    src = "//tools:iree-benchmark-executable",
+    file_name = "iree-benchmark-executable",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_benchmark_module_lib",
+    src = "//tools:iree-benchmark-module",
+    file_name = "iree-benchmark-module",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_c_embed_data_lib",
+    src = "//build_tools/embed_data:iree-c-embed-data",
+    file_name = "iree-c-embed-data",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_convert_parameters_lib",
+    src = "//tools:iree-convert-parameters",
+    file_name = "iree-convert-parameters",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_cpuinfo_lib",
+    src = "//tools:iree-cpuinfo",
+    file_name = "iree-cpuinfo",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_create_parameters_lib",
+    src = "//tools:iree-create-parameters",
+    file_name = "iree-create-parameters",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_dump_module_lib",
+    src = "//tools:iree-dump-module",
+    file_name = "iree-dump-module",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_dump_parameters_lib",
+    src = "//tools:iree-dump-parameters",
+    file_name = "iree-dump-parameters",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_flatcc_cli_lib",
+    src = "@com_github_dvidelabs_flatcc//:flatcc",
+    file_name = "iree-flatcc-cli",
+    output_dir = runtime_libs_path,
+)
+
+copy_to_path(
+    name = "iree_run_module_lib",
+    src = "//tools:iree-run-module",
+    file_name = "iree-run-module",
+    output_dir = runtime_libs_path,
+)
+
+runtime_libs_path_tracy = "iree/_runtime_libs_tracy"
+
+tracy_copy_to_path(
+    name = "prepare_runtime_so_tracy",
+    src = "//runtime/bindings/python:_runtime.so",
+    file_name = "_runtime.so",
+    output_dir = runtime_libs_path_tracy,
+)
+
+py_library(
+    name = "bindings_tracy",
+    data = [":prepare_runtime_so_tracy"],
+    imports = ["iree"],
+)
+
+tracy_copy_to_path(
+    name = "iree_benchmark_executable_lib_tracy",
+    src = "//tools:iree-run-module",
+    file_name = "iree-benchmark-executable",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_benchmark_module_lib_tracy",
+    src = "//tools:iree-benchmark-module",
+    file_name = "iree-benchmark-module",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_convert_parameters_lib_tracy",
+    src = "//tools:iree-convert-parameters",
+    file_name = "iree-convert-parameters",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_cpuinfo_lib_tracy",
+    src = "//tools:iree-cpuinfo",
+    file_name = "iree-cpuinfo",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_create_parameters_lib_tracy",
+    src = "//tools:iree-create-parameters",
+    file_name = "iree-create-parameters",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_dump_module_lib_tracy",
+    src = "//tools:iree-dump-module",
+    file_name = "iree-dump-module",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_dump_parameters_lib_tracy",
+    src = "//tools:iree-dump-parameters",
+    file_name = "iree-dump-parameters",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_run_module_lib_tracy",
+    src = "//tools:iree-run-module",
+    file_name = "iree-run-module",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_c_embed_data_lib_tracy",
+    src = "//build_tools/embed_data:iree-c-embed-data",
+    file_name = "iree-c-embed-data",
+    output_dir = runtime_libs_path_tracy,
+)
+
+tracy_copy_to_path(
+    name = "iree_flatcc_cli_lib_tracy",
+    src = "@com_github_dvidelabs_flatcc//:flatcc",
+    file_name = "iree-flatcc-cli",
+    output_dir = runtime_libs_path_tracy,
+)
+
+py_library(
+    name = "runtime_binaries",
+    data = [
+        ":iree_benchmark_executable_lib",
+        ":iree_benchmark_module_lib",
+        ":iree_c_embed_data_lib",
+        ":iree_convert_parameters_lib",
+        ":iree_cpuinfo_lib",
+        ":iree_create_parameters_lib",
+        ":iree_dump_module_lib",
+        ":iree_dump_parameters_lib",
+        ":iree_flatcc_cli_lib",
+        ":iree_run_module_lib",
+    ],
+)
+
+py_library(
+    name = "runtime_binaries_tracy",
+    data = [
+        ":iree_benchmark_executable_lib_tracy",
+        ":iree_benchmark_module_lib_tracy",
+        ":iree_c_embed_data_lib_tracy",
+        ":iree_convert_parameters_lib_tracy",
+        ":iree_cpuinfo_lib_tracy",
+        ":iree_create_parameters_lib_tracy",
+        ":iree_dump_module_lib_tracy",
+        ":iree_dump_parameters_lib_tracy",
+        ":iree_flatcc_cli_lib_tracy",
+        ":iree_run_module_lib_tracy",
+    ],
+)
+
+py_package(
+    name = "runtime_package",
+    deps = [
+        "runtime_binaries_tracy",
+        ":bindings",
+        ":bindings_tracy",
+        ":runtime_binaries",
+        ":runtime_python",
+    ],
+)
+
+py_wheel(
+    name = "runtime_python_wheel",
+    distribution = "runtime_bazel",
+    entry_points = {
+        "console_scripts": [
+            "iree-run-module = iree._runtime.scripts.iree_run_module.__main__:main",
+            "iree-benchmark-executable = iree._runtime.scripts.iree_benchmark_executable.__main__:main",
+            "iree-benchmark-module = iree._runtime.scripts.iree_benchmark_module.__main__:main",
+            "iree-c-embed-data = iree._runtime.scripts.iree_c_embed_data.__main__:main",
+            "iree-create-parameters = iree._runtime.scripts.iree_create_parameters.__main__:main",
+            "iree-convert-parameters = iree._runtime.scripts.iree_convert_parameters.__main__:main",
+            "iree-dump-module = iree._runtime.scripts.iree_dump_module.__main__:main",
+            "iree-dump-parameters = iree._runtime.scripts.iree_dump_parameters.__main__:main",
+            "iree-cpuinfo = iree._runtime.scripts.iree_cpuinfo.__main__:main",
+            "iree-flatcc-cli = iree._runtime.scripts.iree_flatcc_cli.__main__:main",
+            "iree-tracy-capture = iree._runtime.scripts.iree_tracy_capture.__main__:main",
+        ],
+    },
+    strip_path_prefixes = [
+        "runtime/bindings/python",
+        "runtime",
+    ],
+    version = "0.0.1",
+    deps = [":runtime_package"],
+)

@@ -72,10 +72,10 @@ EXPORTS
   ireeCompilerSourceWrapBuffer
   ireeGPULoweringConfigAttrGet
   ireeGPULoweringConfigAttrGetAttributes
-  ireeGPULoweringConfigAttrGetTypeID
-  ireeGPULoweringConfigAttrGetTileSizes
-  ireeGPULoweringConfigAttrGetSubgroupCount
   ireeGPULoweringConfigAttrGetMmaKind
+  ireeGPULoweringConfigAttrGetSubgroupCount
+  ireeGPULoweringConfigAttrGetTileSizes
+  ireeGPULoweringConfigAttrGetTypeID
   ireeGPUMMAAttrGet
   ireeGPUMMAAttrGetInfo
   ireeGPUMMAAttrGetTypeID
@@ -275,6 +275,7 @@ EXPORTS
   mlirDenseElementsAttrGetDoubleValue
   mlirDenseElementsAttrGetFloatSplatValue
   mlirDenseElementsAttrGetFloatValue
+  mlirDenseElementsAttrGetIndexValue
   mlirDenseElementsAttrGetInt16Value
   mlirDenseElementsAttrGetInt32SplatValue
   mlirDenseElementsAttrGetInt32Value
@@ -466,6 +467,7 @@ EXPORTS
   mlirIsCurrentDebugType
   mlirIsGlobalDebugEnabled
   mlirLLVMArrayTypeGet
+  mlirLLVMArrayTypeGetElementType
   mlirLLVMCConvAttrGet
   mlirLLVMComdatAttrGet
   mlirLLVMDIAnnotationAttrGet
@@ -497,6 +499,9 @@ EXPORTS
   mlirLLVMDISubprogramAttrGetType
   mlirLLVMDISubroutineTypeAttrGet
   mlirLLVMFunctionTypeGet
+  mlirLLVMFunctionTypeGetInput
+  mlirLLVMFunctionTypeGetNumInputs
+  mlirLLVMFunctionTypeGetReturnType
   mlirLLVMLinkageAttrGet
   mlirLLVMPointerTypeGet
   mlirLLVMPointerTypeGetAddressSpace
@@ -519,6 +524,7 @@ EXPORTS
   mlirLocationCallSiteGet
   mlirLocationEqual
   mlirLocationFileLineColGet
+  mlirLocationFileLineColRangeGet
   mlirLocationFromAttribute
   mlirLocationFusedGet
   mlirLocationGetAttribute
@@ -538,6 +544,7 @@ EXPORTS
   mlirMergeSymbolsIntoFromClone
   mlirModuleCreateEmpty
   mlirModuleCreateParse
+  mlirModuleCreateParseFromFile
   mlirModuleDestroy
   mlirModuleFromOperation
   mlirModuleGetBody
@@ -855,6 +862,7 @@ EXPORTS
   mlirValueIsAOpResult
   mlirValuePrint
   mlirValuePrintAsOperand
+  mlirValueReplaceAllUsesExcept
   mlirValueReplaceAllUsesOfWith
   mlirValueSetType
   mlirVectorTypeGet

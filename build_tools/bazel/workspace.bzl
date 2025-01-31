@@ -22,25 +22,39 @@ CUDA_DEPS_DIR_FOR_CI_ENV_KEY = "IREE_CUDA_DEPS_DIR"
 
 def cuda_auto_configure_impl(repository_ctx):
     env = repository_ctx.os.environ
-    cuda_toolkit_root = None
     iree_repo_alias = repository_ctx.attr.iree_repo_alias
+    cuda_toolkit_root = None
 
-    # Probe environment for CUDA toolkit location.
-    env_cuda_toolkit_root = env.get(CUDA_TOOLKIT_ROOT_ENV_KEY)
-    env_cuda_deps_dir_for_ci = env.get(CUDA_DEPS_DIR_FOR_CI_ENV_KEY)
-    if env_cuda_toolkit_root:
-        cuda_toolkit_root = env_cuda_toolkit_root
-    elif env_cuda_deps_dir_for_ci:
-        cuda_toolkit_root = env_cuda_deps_dir_for_ci
+    script_file = repository_ctx.attr.script
+    if script_file and False:
+        # Only support Linux and Windows.
+        # (Assuming repository_ctx.os.name returns a lowercase string like "linux" or "windows".)
+        if repository_ctx.os.name.lower() not in ["linux", "windows"]:
+            fail("CUDA auto configuration downloading is only supported on Linux and Windows, but the current OS is: " + repository_ctx.os.name)
+        # Link and run the download script.
+        script_path = repository_ctx.path(script_file)
+        repository_ctx.symlink(script_path, "download.py")
+        output_dir = repository_ctx.path("cuda_root")
 
-    # Symlink the tree.
+        result = repository_ctx.execute(["python3", "download.py", output_dir], timeout=40)
+        if result.return_code != 0:
+            fail("download.py execution failed:\n" + result.stderr)
+        
+        cuda_toolkit_root = "cuda_root/12.2.1/linux-x86_64"
+    else:
+        # Probe environment for CUDA toolkit location.
+        env_cuda_toolkit_root = env.get(CUDA_TOOLKIT_ROOT_ENV_KEY)
+        env_cuda_deps_dir_for_ci = env.get(CUDA_DEPS_DIR_FOR_CI_ENV_KEY)
+        if env_cuda_toolkit_root:
+            cuda_toolkit_root = env_cuda_toolkit_root
+        elif env_cuda_deps_dir_for_ci:
+            cuda_toolkit_root = env_cuda_deps_dir_for_ci
+
+    # If we found a CUDA toolkit root (either via download or the environment),
+    # create symlinks for the directories and libdevice.
     libdevice_rel_path = "iree_local/libdevice.bc"
-    if cuda_toolkit_root != None:
-        # Symlink top-level directories we care about.
+    if cuda_toolkit_root:
         repository_ctx.symlink(cuda_toolkit_root + "/include", "include")
-
-        # TODO: Should be probing for the libdevice, as it can change from
-        # version to version.
         repository_ctx.symlink(
             cuda_toolkit_root + "/nvvm/libdevice/libdevice.10.bc",
             libdevice_rel_path,
@@ -64,14 +78,17 @@ cuda_auto_configure = repository_rule(
     implementation = cuda_auto_configure_impl,
     attrs = {
         "iree_repo_alias": attr.string(default = "@iree_core"),
+        "script": attr.label(allow_files = True, default=None),
     },
+    local = True
 )
 
-def configure_iree_cuda_deps(iree_repo_alias = None):
+def configure_iree_cuda_deps(iree_repo_alias = None, script = ""):
     maybe(
         cuda_auto_configure,
         name = "iree_cuda",
         iree_repo_alias = iree_repo_alias,
+        script = script,
     )
 
 def configure_iree_submodule_deps(iree_repo_alias = "@", iree_path = "./"):
