@@ -27,7 +27,6 @@
 #include "mlir/Dialect/Shape/Transforms/Passes.h"
 #include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Dialect/Transform/Transforms/Passes.h"
-#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
 
 namespace mlir {
