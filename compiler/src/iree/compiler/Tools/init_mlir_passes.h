@@ -26,6 +26,7 @@
 #include "mlir/Dialect/Shape/Transforms/Passes.h"
 #include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Dialect/Transform/Transforms/Passes.h"
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
 
 namespace mlir {
@@ -50,6 +51,8 @@ inline void registerMlirPasses() {
   registerViewOpGraphPass();
   registerStripDebugInfoPass();
   registerSymbolDCEPass();
+  bufferization::registerBufferizationPasses();
+  registerConvertComplexToStandard();
 
   // Generic conversions
   registerReconcileUnrealizedCastsPass();
