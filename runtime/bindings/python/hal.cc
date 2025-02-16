@@ -20,6 +20,7 @@
 #include "./vm.h"
 #include "iree/base/internal/path.h"
 #include "iree/base/status.h"
+#include "iree/base/string_view.h"
 #include "iree/hal/api.h"
 #include "iree/hal/utils/allocators.h"
 #include "iree/modules/hal/module.h"
@@ -228,6 +229,121 @@ py::object HalAllocator::AllocateBufferCopy(
   iree_hal_buffer_release(hal_buffer);
 
   return py::cast(HalBufferView::StealFromRawPtr(hal_buffer_view),
+                  py::rv_policy::move);
+}
+
+HalExternalBuffer HalAllocator::ExportBuffer(HalBuffer& buffer) {
+  iree_hal_external_buffer_t external_buffer;
+  CheckApiStatus(
+      iree_hal_allocator_export_buffer(
+          this->raw_ptr(), buffer.raw_ptr(),
+          IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION, 0, &external_buffer),
+      "Could not export device buffer");
+  return HalExternalBuffer{external_buffer};
+}
+
+HalBuffer HalAllocator::ImportBuffer(HalExternalBuffer& external_buffer,
+                                     iree_hal_buffer_usage_t buffer_usage,
+                                     iree_hal_memory_access_t buffer_access,
+                                     iree_hal_memory_type_t buffer_type) {
+  iree_hal_buffer_t* import_buffer;
+  iree_hal_buffer_params_t import_buffer_params;
+  memset(&import_buffer_params, 0, sizeof(import_buffer_params));
+  import_buffer_params.usage = buffer_usage;
+  import_buffer_params.access = buffer_access;
+  import_buffer_params.type = buffer_type;
+  CheckApiStatus(
+      iree_hal_allocator_import_buffer(
+          this->raw_ptr(), import_buffer_params, &external_buffer.buffer,
+          iree_hal_buffer_release_callback_null(), &import_buffer),
+      "Could not import external device buffer");
+  return HalBuffer::StealFromRawPtr(import_buffer);
+}
+
+py::object HalAllocator::AllocateBufferViewCopy(
+    int memory_type, int allowed_usage, HalDevice& source_device,
+    HalDevice& target_device, HalBufferView& source_buffer_view,
+    bool requires_target_buffer_import) {
+  IREE_TRACE_SCOPE_NAMED("HalAllocator::AllocateBufferViewCopy");
+
+  // For now, this uses the source_device to execute the copy
+  // PRE the source buffer is visible to the target device
+
+  iree_hal_buffer_view_t* source_buffer_view_raw = source_buffer_view.raw_ptr();
+  iree_hal_buffer_t* target_out_buffer = nullptr;
+  iree_hal_buffer_t* target_buffer = nullptr;
+
+  iree_status_t status = iree_ok_status();
+  {
+    py::gil_scoped_release release;
+
+    iree_hal_buffer_t* source_buffer_view_buffer =
+        iree_hal_buffer_view_buffer(source_buffer_view_raw);
+
+    IREE_ASSERT_TRUE(
+        iree_hal_buffer_view_encoding_type(source_buffer_view_raw) ==
+            IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+        "Expecting dense layout");
+
+    // allocate buffer with |buffer_view_byte_length|
+    status = iree_hal_allocator_allocate_buffer(
+        target_device.allocator(),
+        (iree_hal_buffer_params_t){
+            .usage = static_cast<iree_hal_buffer_usage_t>(allowed_usage),
+            .type = static_cast<iree_hal_memory_type_t>(memory_type)},
+        iree_hal_buffer_view_byte_length(source_buffer_view_raw),
+        &target_out_buffer);
+    CheckApiStatus(status, "Failed to allocate device buffer");
+
+    iree_hal_external_buffer_t external_buffer{};
+    iree_hal_buffer_t* import_buffer{nullptr};
+    if (requires_target_buffer_import) {
+      CheckApiStatus(iree_hal_allocator_export_buffer(
+                         iree_hal_device_allocator(target_device.raw_ptr()),
+                         target_out_buffer,
+                         IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION, 0,
+                         &external_buffer),
+                     "Could not export device buffer");
+
+      iree_hal_buffer_params_t import_buffer_params;
+      memset(&import_buffer_params, 0, sizeof(import_buffer_params));
+      import_buffer_params.usage = IREE_HAL_BUFFER_USAGE_DEFAULT;
+      import_buffer_params.access = IREE_HAL_MEMORY_ACCESS_DISCARD_WRITE;
+      import_buffer_params.type = IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE;
+      CheckApiStatus(
+          iree_hal_allocator_import_buffer(
+              iree_hal_device_allocator(source_device.raw_ptr()),
+              import_buffer_params, &external_buffer,
+              iree_hal_buffer_release_callback_null(), &import_buffer),
+          "Could not import external device buffer");
+
+      target_buffer = import_buffer;
+    } else {
+      target_buffer = target_out_buffer;
+    }
+
+    // copy |buffer_view_byte_length| from allocated_buffer +  offset(view)
+    status = iree_hal_device_transfer_d2d(
+        source_device.raw_ptr(),
+        iree_hal_buffer_allocated_buffer(source_buffer_view_buffer),
+        iree_hal_buffer_byte_offset(source_buffer_view_buffer), target_buffer,
+        0, iree_hal_buffer_view_byte_length(source_buffer_view_raw),
+        IREE_HAL_TRANSFER_BUFFER_FLAG_DEFAULT, iree_infinite_timeout());
+
+    CheckApiStatus(status, "Failed to copy device buffer");
+
+    // at this point, there is good data in the buffer so disallow discarding
+    target_out_buffer->allowed_access &=
+        (iree_hal_memory_access_t)(~IREE_HAL_MEMORY_ACCESS_DISCARD);
+  }
+
+  iree_hal_buffer_view_t* target_out_buffer_view{};
+  status = iree_hal_buffer_view_create_like(
+      target_out_buffer, source_buffer_view_raw,
+      iree_hal_allocator_host_allocator(raw_ptr()), &target_out_buffer_view);
+  CheckApiStatus(status, "Failed to create buffer view");
+
+  return py::cast(HalBufferView::StealFromRawPtr(target_out_buffer_view),
                   py::rv_policy::move);
 }
 
@@ -728,6 +844,8 @@ py::object HalDevice::CreateDLPackCapsule(HalBufferView& buffer_view,
   buffer = iree_hal_buffer_allocated_buffer(buffer);
   iree_hal_allocator_t* alloc = iree_hal_device_allocator(raw_ptr());
   iree_hal_external_buffer_t external_buffer;
+  buffer->allowed_access &=
+      (iree_hal_memory_access_t)(~IREE_HAL_MEMORY_ACCESS_DISCARD);
   CheckApiStatus(
       iree_hal_allocator_export_buffer(
           alloc, buffer, IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
@@ -753,7 +871,16 @@ py::object HalDevice::CreateDLPackCapsule(HalBufferView& buffer_view,
   return py::steal<py::object>(capsule);
 }
 
-HalBufferView HalDevice::FromDLPackCapsule(py::object input_capsule) {
+nanobind::tuple HalDevice::GetInfo() {
+  iree_hal_device_info_t info = iree_hal_device_info(raw_ptr());
+
+  return nanobind::make_tuple(
+      std::string(info.identifier.data, info.identifier.size), info.device_id);
+}
+
+HalBufferView HalDevice::FromDLPackCapsule(
+    py::object input_capsule, iree_hal_memory_type_t memory_type,
+    iree_hal_memory_access_t memory_access) {
   struct State {
     ~State() {
       if (managed_tensor && managed_tensor->deleter) {
@@ -856,8 +983,8 @@ HalBufferView HalDevice::FromDLPackCapsule(py::object input_capsule) {
   iree_hal_buffer_params_t params;
   memset(&params, 0, sizeof(params));
   params.usage = IREE_HAL_BUFFER_USAGE_DEFAULT;
-  params.access = IREE_HAL_MEMORY_ACCESS_ANY;
-  params.type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL;
+  params.access = memory_access;
+  params.type = memory_type;
   iree_hal_external_buffer_t external_buffer;
   memset(&external_buffer, 0, sizeof(external_buffer));
   external_buffer.type = IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION;
@@ -1300,6 +1427,7 @@ void SetupHalBindings(nanobind::module_ m) {
       .value("NONE", IREE_HAL_MEMORY_ACCESS_NONE)
       .value("READ", IREE_HAL_MEMORY_ACCESS_READ)
       .value("WRITE", IREE_HAL_MEMORY_ACCESS_WRITE)
+      .value("UNALIGNED", IREE_HAL_MEMORY_ACCESS_UNALIGNED)
       .value("DISCARD", IREE_HAL_MEMORY_ACCESS_DISCARD)
       .value("DISCARD_WRITE", IREE_HAL_MEMORY_ACCESS_DISCARD_WRITE)
       .value("ALL", IREE_HAL_MEMORY_ACCESS_ALL)
@@ -1392,7 +1520,12 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("create_dlpack_capsule", &HalDevice::CreateDLPackCapsule,
            py::arg("buffer_view"), py::arg("device_type_code"),
            py::arg("device_id"))
-      .def("from_dlpack_capsule", &HalDevice::FromDLPackCapsule)
+      .def("from_dlpack_capsule", &HalDevice::FromDLPackCapsule,
+           py::arg("input_capsule"),
+           py::arg("memory_type") = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+           py::arg("memory_access") =
+               IREE_HAL_MEMORY_ACCESS_READ | IREE_HAL_MEMORY_ACCESS_WRITE)
+      .def("get_info", &HalDevice::GetInfo)
       .def("__repr__", [](HalDevice& self) {
         auto id_sv = iree_hal_device_id(self.raw_ptr());
         return std::string(id_sv.data, id_sv.size);
@@ -1494,6 +1627,18 @@ void SetupHalBindings(nanobind::module_ m) {
           py::arg("allocation_size"), py::keep_alive<0, 1>(),
           "Allocates a new buffer with requested characteristics (does not "
           "initialize with specific data).")
+      .def("export_buffer", &HalAllocator::ExportBuffer, py::arg("buffer"),
+           py::keep_alive<0, 1>()  // keep the origin buffer alive, as long as
+                                   // the export buffer exists
+           )
+      .def("import_buffer", &HalAllocator::ImportBuffer,
+           py::arg("external_buffer"),
+           py::arg("buffer_usage") = IREE_HAL_BUFFER_USAGE_DEFAULT,
+           py::arg("buffer_access") = IREE_HAL_MEMORY_ACCESS_WRITE,
+           py::arg("buffer_type") = IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE,
+           py::keep_alive<0, 1>()  // keep the external buffer alive, while the
+                                   // import_buffer exists
+           )
       .def("allocate_buffer_copy", &HalAllocator::AllocateBufferCopy,
            py::arg("memory_type"), py::arg("allowed_usage"), py::arg("device"),
            py::arg("buffer"), py::arg("element_type") = py::none(),
@@ -1503,6 +1648,17 @@ void SetupHalBindings(nanobind::module_ m) {
            "matching the characteristics of the Python buffer. The format is "
            "requested as ND/C-Contiguous, which may incur copies if not "
            "already in that format.")
+      .def("allocate_buffer_view_copy", &HalAllocator::AllocateBufferViewCopy,
+           py::arg("memory_type"), py::arg("allowed_usage"),
+           py::arg("source_device"), py::arg("target_device"),
+           py::arg("buffer"), py::arg("requires_target_buffer_import"),
+           py::keep_alive<0, 1>(),
+           "Copy the contents of the buffer_view to a newly allocated buffer "
+           "on the target device and return a "
+           "view into the new buffer that is analogous to buffer_view. The "
+           "newly allocated buffer must be visible to the source device. "
+           "Therefore the memory_type must be set such that the newly "
+           "allocated buffer is visible by the source device.")
       .def("allocate_host_staging_buffer_copy",
            &HalAllocator::AllocateHostStagingBufferCopy, py::arg("device"),
            py::arg("initial_contents"), py::keep_alive<0, 1>(),
@@ -1524,8 +1680,13 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("allowed_usage", &HalBuffer::allowed_usage)
       .def("create_view", &HalBuffer::CreateView, py::arg("shape"),
            py::arg("element_size"), py::keep_alive<0, 1>())
+      .def("create_view_like", &HalBuffer::CreateViewLike, py::arg("view"),
+           py::keep_alive<0, 1>())
       .def("map", HalMappedMemory::CreateFromBuffer, py::keep_alive<0, 1>())
       .def("__repr__", &HalBuffer::Repr);
+
+  auto hal_external_buffer =
+      py::class_<HalExternalBuffer>(m, "HalExternalBuffer");
 
   auto hal_buffer_view = py::class_<HalBufferView>(m, "HalBufferView");
   VmRef::BindRefProtocol(hal_buffer_view, iree_hal_buffer_view_type,
