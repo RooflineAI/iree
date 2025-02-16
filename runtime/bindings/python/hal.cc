@@ -231,6 +231,61 @@ py::object HalAllocator::AllocateBufferCopy(
                   py::rv_policy::move);
 }
 
+py::object HalAllocator::AllocateBufferViewCopy(int memory_type,
+                                                int allowed_usage,
+                                                HalDevice& device,
+                                                HalDevice& target,
+                                                HalBufferView& in_buffer_view) {
+  IREE_TRACE_SCOPE_NAMED("HalAllocator::AllocateBufferViewCopy");
+
+  iree_hal_buffer_view_t* in_buffer_view_raw = in_buffer_view.raw_ptr();
+  iree_hal_buffer_t* out_buffer = nullptr;
+
+  iree_status_t status = iree_ok_status();
+  {
+    py::gil_scoped_release release;
+
+    iree_hal_buffer_t* in_buffer_view_buffer =
+        iree_hal_buffer_view_buffer(in_buffer_view_raw);
+
+    IREE_ASSERT_TRUE(iree_hal_buffer_view_encoding_type(in_buffer_view_raw) ==
+                         IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+                     "Expecting dense layout");
+
+    // allocate buffer with |buffer_view_byte_length|
+    status = iree_hal_allocator_allocate_buffer(
+        target.allocator(),
+        (iree_hal_buffer_params_t){
+            .usage = static_cast<iree_hal_buffer_usage_t>(allowed_usage),
+            .type = static_cast<iree_hal_memory_type_t>(memory_type)},
+        iree_hal_buffer_view_byte_length(in_buffer_view_raw), &out_buffer);
+    CheckApiStatus(status, "Failed to allocate device visible buffer");
+
+    // copy |buffer_view_byte_length| from allocated_buffer +  offset(view)
+    status = iree_hal_device_transfer_d2d(
+        device.raw_ptr(),
+        iree_hal_buffer_allocated_buffer(in_buffer_view_buffer),
+        iree_hal_buffer_byte_offset(in_buffer_view_buffer), out_buffer, 0,
+        iree_hal_buffer_view_byte_length(in_buffer_view_raw),
+        IREE_HAL_TRANSFER_BUFFER_FLAG_DEFAULT, iree_infinite_timeout());
+
+    CheckApiStatus(status, "Failed to copy device buffer");
+
+    // at this point, there is good data in the buffer so disallow discarding
+    out_buffer->allowed_access &=
+        (iree_hal_memory_access_t)(~IREE_HAL_MEMORY_ACCESS_DISCARD);
+  }
+
+  iree_hal_buffer_view_t* out_buffer_view{};
+  status = iree_hal_buffer_view_create_like(
+      out_buffer, in_buffer_view_raw,
+      iree_hal_allocator_host_allocator(raw_ptr()), &out_buffer_view);
+  CheckApiStatus(status, "Failed to create buffer view");
+
+  return py::cast(HalBufferView::StealFromRawPtr(out_buffer_view),
+                  py::rv_policy::move);
+}
+
 HalBuffer HalAllocator::AllocateHostStagingBufferCopy(HalDevice& device,
                                                       py::handle buffer) {
   IREE_TRACE_SCOPE_NAMED("HalAllocator::AllocateHostStagingBufferCopy");
@@ -1503,6 +1558,11 @@ void SetupHalBindings(nanobind::module_ m) {
            "matching the characteristics of the Python buffer. The format is "
            "requested as ND/C-Contiguous, which may incur copies if not "
            "already in that format.")
+      .def("allocate_buffer_view_copy", &HalAllocator::AllocateBufferViewCopy,
+           py::arg(" memory_type"), py::arg("allowed_usage"), py::arg("device"),
+           py::arg("target"), py::arg("buffer"), py::keep_alive<0, 1>(),
+           "Copy the contents of the buffer_view to a new buffer and return a "
+           "view into the new buffer that is analogous to buffer_view.")
       .def("allocate_host_staging_buffer_copy",
            &HalAllocator::AllocateHostStagingBufferCopy, py::arg("device"),
            py::arg("initial_contents"), py::keep_alive<0, 1>(),
@@ -1524,6 +1584,8 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("allowed_usage", &HalBuffer::allowed_usage)
       .def("create_view", &HalBuffer::CreateView, py::arg("shape"),
            py::arg("element_size"), py::keep_alive<0, 1>())
+      .def("create_view_like", &HalBuffer::CreateViewLike, py::arg("view"),
+           py::keep_alive<0, 1>())
       .def("map", HalMappedMemory::CreateFromBuffer, py::keep_alive<0, 1>())
       .def("__repr__", &HalBuffer::Repr);
 

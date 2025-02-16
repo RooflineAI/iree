@@ -187,6 +187,11 @@ class HalAllocator : public ApiRefCounted<HalAllocator, iree_hal_allocator_t> {
   py::object AllocateBufferCopy(int memory_type, int allowed_usage,
                                 HalDevice& device, py::object buffer,
                                 std::optional<uint64_t> element_type);
+  // Copy the contents of the |buffer_view| to a new buffer and return a view
+  // into the new buffer that is analogous to |buffer_view|.
+  py::object AllocateBufferViewCopy(int memory_type, int allowed_usage,
+                                    HalDevice& device, HalDevice& target,
+                                    HalBufferView& buffer_view);
   HalBuffer AllocateHostStagingBufferCopy(HalDevice& device, py::handle buffer);
 };
 
@@ -226,6 +231,14 @@ class HalBuffer : public ApiRefCounted<HalBuffer, iree_hal_buffer_t> {
     CheckApiStatus(iree_hal_buffer_view_create(
                        raw_ptr(), shape.s.size(), shape.s.data(), element_type,
                        encoding_type, iree_allocator_system(), &bv),
+                   "Error creating buffer view");
+    return HalBufferView::StealFromRawPtr(bv);
+  }
+
+  HalBufferView CreateViewLike(HalBufferView& view) {
+    iree_hal_buffer_view_t* bv;
+    CheckApiStatus(iree_hal_buffer_view_create_like(
+                       raw_ptr(), view.raw_ptr(), iree_allocator_system(), &bv),
                    "Error creating buffer view");
     return HalBufferView::StealFromRawPtr(bv);
   }
