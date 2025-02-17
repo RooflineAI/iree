@@ -205,8 +205,9 @@ getTensorCoreConfig(SmallVectorImpl<TileWorkgroupSizePair> &tileSizes,
     tileSizes.push_back(TileWorkgroupSizePair({{32, 32, 32}, {64, 2, 1}, 4}));
   } else {
     if (parallelDim >= kLargDimThreashold * kLargDimThreashold) {
-      tileSizes.push_back(
-          TileWorkgroupSizePair({{128, 256, 16}, {128, 2, 1}, 4}));
+      llvm::append_values(
+          tileSizes, TileWorkgroupSizePair({{128, 256, 16}, {128, 2, 1}, 4}),
+          TileWorkgroupSizePair({{64, 128, 16}, {64, 2, 1}, 4}));
     }
     llvm::append_values(tileSizes,
                         TileWorkgroupSizePair({{32, 32, 16}, {64, 2, 1}, 4}),
@@ -1866,6 +1867,23 @@ setVectorDistributionConfig(IREE::GPU::TargetAttr target,
 // Contraction Pipeline Configuration
 //====---------------------------------------------------------------------===//
 
+// Checks whether the giving tiling will fit within the GPU shared memory.
+static bool doesMatMulTileFitInSharedMem(const TileWorkgroupSizePair &config,
+                                         Type element,
+                                         IREE::GPU::TargetAttr target) {
+  unsigned int bytesPerElement = element.getIntOrFloatBitWidth() / 8;
+  // Given a potential tiling we can figure out the amount of memory each matrix
+  // will take up in shared memory for a mat mul op, i.e. C = A x B
+  unsigned int calculatedMem =
+      // Find Matrix A size: MxK
+      bytesPerElement * config.tileSize[0] * config.tileSize[2] +
+      // Find Matrix B size: KxN
+      bytesPerElement * config.tileSize[1] * config.tileSize[2] +
+      // Find Matrix C size: MxN
+      bytesPerElement * config.tileSize[0] * config.tileSize[1];
+  return calculatedMem < target.getWgp().getMaxWorkgroupMemoryBytes();
+}
+
 static LogicalResult setContractConfig(IREE::GPU::TargetAttr target,
                                        mlir::FunctionOpInterface entryPoint,
                                        linalg::LinalgOp op) {
@@ -2061,7 +2079,8 @@ static LogicalResult setContractConfig(IREE::GPU::TargetAttr target,
       for (TileWorkgroupSizePair &config : TCtileSizeConfig) {
         if (sizeK % config.tileSize[2] == 0 &&
             sizeN % config.tileSize[1] == 0 &&
-            sizeM % config.tileSize[0] == 0) {
+            sizeM % config.tileSize[0] == 0 &&
+            doesMatMulTileFitInSharedMem(config, elementType, target)) {
           CodeGenPipeline codegenPipeline = getTensorCorePipeline(elementType);
           return setMatmulConfig(
               config.tileSize[0], config.tileSize[1], config.tileSize[2],
