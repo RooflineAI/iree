@@ -2,6 +2,8 @@
 // RUN:   --iree-gpu-test-target=sm_60 %s | FileCheck %s
 // RUN: iree-opt --split-input-file --pass-pipeline="builtin.module(iree-codegen-llvmgpu-configuration-pipeline)" \
 // RUN:   --iree-gpu-test-target=sm_80 %s | FileCheck %s --check-prefix=SM80
+// RUN: iree-opt --split-input-file --pass-pipeline="builtin.module(iree-codegen-llvmgpu-configuration-pipeline)" \
+// RUN:   --iree-gpu-test-target=sm_89 %s | FileCheck %s --check-prefix=SM89
 
 // Transform dialect attributes are tested separately.
 
@@ -705,3 +707,31 @@ func.func @i4_dequant_matvec() {
 //  CHECK-SAME:   translation_info = #[[$TRANSLATION]]
 //       CHECK:   linalg.generic
 //  CHECK-SAME:     lowering_config = #[[$CONFIG]]
+
+// -----
+
+#pipeline_layout = #hal.pipeline.layout<bindings = [
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>,
+  #hal.pipeline.binding<storage_buffer>
+]>
+func.func @large_matmul_f32_sm_89() {
+  %cst = arith.constant 0.000000e+00 : f32
+  %0 = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : !flow.dispatch.tensor<readonly:tensor<128x2048xf32>>
+  %1 = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) : !flow.dispatch.tensor<readonly:tensor<2048x128256xf32>>
+  %2 = hal.interface.binding.subspan layout(#pipeline_layout) binding(2) : !flow.dispatch.tensor<writeonly:tensor<128x128256xf32>>
+  %3 = flow.dispatch.tensor.load %0, offsets = [0, 0], sizes = [128, 2048], strides = [1, 1] : !flow.dispatch.tensor<readonly:tensor<128x2048xf32>> -> tensor<128x2048xf32>
+  %4 = flow.dispatch.tensor.load %1, offsets = [0, 0], sizes = [2048, 128256], strides = [1, 1] : !flow.dispatch.tensor<readonly:tensor<2048x128256xf32>> -> tensor<2048x128256xf32>
+  %5 = tensor.empty() : tensor<128x128256xf32>
+  %6 = linalg.fill ins(%cst : f32) outs(%5 : tensor<128x128256xf32>) -> tensor<128x128256xf32>
+  %7 = linalg.matmul ins(%3, %4 : tensor<128x2048xf32>, tensor<2048x128256xf32>) outs(%6 : tensor<128x128256xf32>) -> tensor<128x128256xf32>
+  flow.dispatch.tensor.store %7, %2, offsets = [0, 0], sizes = [128, 128256], strides = [1, 1] : tensor<128x128256xf32> -> !flow.dispatch.tensor<writeonly:tensor<128x128256xf32>>
+  return
+}
+//  SM89-DAG: #[[CONFIG:.+]] = #iree_codegen.lowering_config<tile_sizes = {{\[}}[64, 128, 16]{{\]}}
+//  SM89-DAG: #[[TRANSLATION:.+]] = #iree_codegen.translation_info<pipeline = LLVMGPUMatmulTensorCoreMmaSync workgroup_size = [64, 2, 1] subgroup_size = 32, {pipeline_depth = 4 : i64, store_stage = 1 : i64}>
+//      SM89: func.func @large_matmul_f32_sm_89()
+// SM89-SAME:     translation_info = #[[TRANSLATION]]
+//      SM89: linalg.fill
+//      SM89: linalg.matmul
+// SM89-SAME:     lowering_config = #[[CONFIG]]
