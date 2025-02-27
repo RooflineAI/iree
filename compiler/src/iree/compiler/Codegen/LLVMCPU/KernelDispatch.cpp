@@ -15,6 +15,7 @@
 #include "iree/compiler/Codegen/Utils/LinalgOpInfo.h"
 #include "iree/compiler/Codegen/Utils/Utils.h"
 #include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
+#include "iree/compiler/Dialect/LinalgExt/IR/LinalgExtInterfaces.h"
 #include "iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.h"
 #include "iree/compiler/Dialect/LinalgExt/Utils/IndexingUtils.h"
 #include "llvm/ADT/SmallVectorExtras.h"
@@ -33,6 +34,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Interfaces/TilingInterface.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <numeric>
@@ -790,6 +792,12 @@ static void limitVectorTileSizes(linalg::LinalgOp op,
   }
 }
 
+static void limitVectorTileSizes(IREE::LinalgExt::ScanOp scanOp,
+  SmallVectorImpl<int64_t> &vecTileSizes,
+  int64_t eachOperandMaxTileBits,
+  int64_t allOperandsMaxTileBits) {
+}
+
 // Returns the size in bits of SIMD register space, or 0 if it can't be
 // determined (e.g. Arm SVE).
 static int getRegisterSpaceBitsIfKnown(IREE::HAL::ExecutableTargetAttr target) {
@@ -816,12 +824,15 @@ static int getRegisterSpaceBitsIfKnown(IREE::HAL::ExecutableTargetAttr target) {
 // `op` can simultaneously be allocated in SIMD registers. Does nothing when
 // SIMD register space can't be determined as a compile-time constant (e.g. Arm
 // SVE).
-static void limitVectorTileSizes(linalg::LinalgOp op,
+static void limitVectorTileSizes(Operation *op,
                                  SmallVectorImpl<int64_t> &vecTileSizes) {
   if (int registerSpaceBits = getRegisterSpaceBitsIfKnown(
           IREE::HAL::ExecutableTargetAttr::lookup(op))) {
-    limitVectorTileSizes(op, vecTileSizes, registerSpaceBits,
-                         registerSpaceBits);
+    TypeSwitch<Operation *, void>(op)
+      .Case<linalg::LinalgOp, IREE::LinalgExt::ScanOp>([&](auto op) {
+        return limitVectorTileSizes(op, vecTileSizes, registerSpaceBits, registerSpaceBits);
+      })
+      .Default([&](auto op) -> void {});
   }
 }
 
@@ -2605,10 +2616,7 @@ static LogicalResult setRootConfig(mlir::FunctionOpInterface entryPointFn,
   SmallVector<int64_t> vecTileSizes = distTileSizes;
 
   // Add an extra level of tiling.
-  // TODO: Limit vector tile sizes for other TilingInterface ops.
-  if (auto linalgOp = dyn_cast<linalg::LinalgOp>(*op)) {
-    limitVectorTileSizes(linalgOp, vecTileSizes);
-  }
+  limitVectorTileSizes(op, vecTileSizes);
   tileSizes.push_back(vecTileSizes);
   return setOpConfigAndEntryPointFnTranslation(
       entryPointFn, op, tileSizes, DispatchLoweringPassPipeline::CPUDefault);
