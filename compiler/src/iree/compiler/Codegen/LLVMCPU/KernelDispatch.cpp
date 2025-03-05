@@ -824,6 +824,12 @@ static int getRegisterSpaceBitsIfKnown(IREE::HAL::ExecutableTargetAttr target) {
 // `op` can simultaneously be allocated in SIMD registers. Does nothing when
 // SIMD register space can't be determined as a compile-time constant (e.g. Arm
 // SVE).
+// TODO: Although register size restrictions are the harshest in most scenarios,
+// we may need to account for stack allocation size limit that is currently
+// defined within LLVMCPUCheckIRBeforeLLVMConversionPass. A simple way would be
+// to just compare the joint size of tiled operands against the limit, however
+// this could be overly conservative - we could at least enhance that by tracking
+// the input operands back to tensor / buffer declarations.
 static void limitVectorTileSizes(Operation *op,
                                  SmallVectorImpl<int64_t> &vecTileSizes) {
   if (int registerSpaceBits = getRegisterSpaceBitsIfKnown(
