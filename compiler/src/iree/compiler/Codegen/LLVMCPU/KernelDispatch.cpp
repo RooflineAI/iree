@@ -30,6 +30,8 @@
 #include "mlir/Dialect/MemRef/Transforms/Transforms.h"
 #include "mlir/Dialect/Utils/IndexingUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
+#include "mlir/Dialect/Utils/StructuredOpsUtils.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -695,6 +697,8 @@ static void limitVectorTileSizes(linalg::LinalgOp op,
         return IREE::Util::getTypeBitWidth(getElementTypeOrSelf(t));
       });
 
+  // WIP TODO: In scope of generalization efforts, maybe move that into the
+  // type-switching version of 'limitVectorTileSizes()'
   // For each operand, we track how big the tile is going to be based on the
   // dimensions that we have already accounted for. Here we initialize this to
   // just elemBitWidth, having not yet accounted for any array dimension.
@@ -796,6 +800,27 @@ static void limitVectorTileSizes(IREE::LinalgExt::ScanOp scanOp,
   SmallVectorImpl<int64_t> &vecTileSizes,
   int64_t eachOperandMaxTileBits,
   int64_t allOperandsMaxTileBits) {
+  auto operandTypes = scanOp.getOperandTypes();
+  auto iteratorTypes = scanOp.getLoopIteratorTypes();
+  for (auto ty : operandTypes) {
+    // WIP TODO: Not only tensor types
+    auto TT = cast<TensorType>(ty);
+    int64_t parallelTileSizeBits = IREE::Util::getTypeBitWidth(TT.getElementType());
+    // WIP TODO: Proper assert on matching "full tensor" var sizes
+    for (auto [dimIdx, dimSize] : llvm::enumerate(TT.getShape())) {
+      // Early exit for the scanned dimension
+      if (iteratorTypes[dimIdx] == utils::IteratorType::reduction) {
+        assert(dimIdx == scanOp.getDimension());
+        // WIP TODO: Is it always a reasonable assumption by this stage?
+        assert(vecTileSizes[dimIdx] == 0);
+        parallelTileSizeBits *= dimSize;
+        continue;
+      }
+      parallelTileSizeBits *= vecTileSizes[dimIdx];
+    }
+    if (parallelTileSizeBits > eachOperandMaxTileBits)
+      vecTileSizes[0] /= 2;
+  }
 }
 
 // Returns the size in bits of SIMD register space, or 0 if it can't be
