@@ -164,6 +164,11 @@ isTiledAndDistributedLoop(scf::ForOp forOp);
 SmallVector<LoopTilingAndDistributionInfo>
 getTiledAndDistributedLoopInfo(mlir::FunctionOpInterface funcOp);
 
+void limitTileSizesPerDstStyleOps(DestinationStyleOpInterface rootOp,
+  uint64_t limitInBits,
+  SmallVector<int64_t> &tileSizes,
+  ArrayRef<bool> scalableTileFlags);
+
 /// Sets the tile sizes of the SCFTilingOptions. If `tileScalableFlags` are
 /// provided the corresponding tile size will be multiplied by a vector.vscale
 /// op.

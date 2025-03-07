@@ -19,6 +19,7 @@
 #include "mlir/Dialect/SCF/Transforms/TileUsingInterface.h"
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/IR/Iterators.h"
+#include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -257,6 +258,24 @@ void LLVMCPUTileAndFusePass::runOnOperation() {
           getLoweringConfig<IREE::Codegen::LoweringConfigAttr>(consumerOp)) {
     tileSizes = loweringConfig.getTileSizeVals(tilingLevel);
     tileScalableFlags = loweringConfig.getScalableTileFlagVals(tilingLevel);
+    unsigned maxStackAllocInBytes = UINT_MAX;
+    auto targetAttr = IREE::HAL::ExecutableTargetAttr::lookup(consumerOp);
+    if (targetAttr) {
+      auto nativeStackSizeAttr =
+          getConfigIntegerAttr(targetAttr, "max_stack_allocation_size");
+      if (nativeStackSizeAttr) {
+        maxStackAllocInBytes = nativeStackSizeAttr->getInt();
+      }
+    }
+    // WIP TODO: Maybe as a LogicalResult & update the loweringConfig values
+    if (auto destStyleOp =
+            dyn_cast<DestinationStyleOpInterface>(consumerOp.getOperation())) {
+      limitTileSizesPerDstStyleOps(destStyleOp, maxStackAllocInBytes * 8,
+                                   tileSizes, tileScalableFlags);
+      TileSizesListType updatedSizes = loweringConfig.getTileSizeVals();
+      updatedSizes[tilingLevel] = tileSizes;
+      setLoweringConfig(consumerOp, IREE::Codegen::LoweringConfigAttr::get(consumerOp->getContext(), updatedSizes));
+    }
   } else {
     FailureOr<IREE::Codegen::LoweringConfigAttr> maybeLoweringConfig =
         getFirstLoweringConfig<IREE::Codegen::LoweringConfigAttr>(
