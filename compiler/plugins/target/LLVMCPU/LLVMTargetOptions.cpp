@@ -139,6 +139,7 @@ void LLVMTarget::storeToConfigAttrs(MLIRContext *context,
   if (vectorWidthInBytes != DEFAULT_VECTOR_WIDTH_IN_BYTES) {
     addInt64("native_vector_size", vectorWidthInBytes);
   }
+  addInt64("max_stack_allocation_size", maxStackAllocSizeInBytes);
   if (linkEmbedded != DEFAULT_LINK_EMBEDDED) {
     addBool("link_embedded", linkEmbedded);
   }
