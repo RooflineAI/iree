@@ -9,7 +9,7 @@
 // CHECK-X86-DEFAULT: module attributes {stream.affinity.default = #hal.device.affinity<@__device_0>} {
 // CHECK-X86-DEFAULT-NEXT: util.global private @__device_0 = #hal.device.target<"local",
 // CHECK-X86-DEFAULT-SAME: [#hal.executable.target<"llvm-cpu", "embedded-elf-x86_64", {cpu = "", cpu_features = ""
-// CHECK-X86-DEFAULT-SAME: max_stack_allocation_size = 32678 : i64
+// CHECK-X86-DEFAULT-SAME: max_stack_allocation_size = 32768 : i64
 // CHECK-X86-DEFAULT-SAME: native_vector_size = 16 : i64
 // CHECK-X86-DEFAULT-SAME: target_triple = "x86_64-unknown-unknown-eabi-elf"
 // CHECK-X86-DEFAULT-SAME: }>]> : !hal.device

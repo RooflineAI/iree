@@ -33,7 +33,7 @@ enum class SanitizerKind {
 struct LLVMTarget {
   static constexpr const char *DEFAULT_DATA_LAYOUT = "";
   static constexpr int64_t DEFAULT_VECTOR_WIDTH_IN_BYTES = 0;
-  static constexpr unsigned DEFAULT_MAX_STACK_ALLOC_SIZE_IN_BYTES = 32678;
+  static constexpr unsigned DEFAULT_MAX_STACK_ALLOC_SIZE_IN_BYTES = 32768;
   static constexpr bool DEFAULT_LINK_EMBEDDED = true;
   static constexpr bool DEFAULT_DEBUG_SYMBOLS = true;
   static constexpr SanitizerKind DEFAULT_SANITIZER_KIND = SanitizerKind::kNone;
