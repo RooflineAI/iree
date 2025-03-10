@@ -1,12 +1,6 @@
 // This test aims to check default HAL properties for LLVM CPU target, and
 // whether CLI options modify the values correctly.
 
-module {
-  util.func public @foo(%arg0: tensor<?xf32>) -> tensor<?xf32> {
-    util.return %arg0 : tensor<?xf32>
-  }
-}
-
 // TODO: Expand the test for more CLI configurations, e.g. different target triples
 
 // RUN: iree-compile --compile-to=preprocessing --iree-hal-target-backends=llvm-cpu --iree-llvmcpu-target-triple=x86_64-linux-gnu %s \
@@ -31,3 +25,9 @@ module {
 // CHECK-STACK-VALUE-SAME: max_stack_allocation_size = 65536 : i64
 //
 // CHECK-STACK-VALUE-SAME: }>]> : !hal.device
+
+module {
+  util.func public @foo(%arg0: tensor<?xf32>) -> tensor<?xf32> {
+    util.return %arg0 : tensor<?xf32>
+  }
+}
