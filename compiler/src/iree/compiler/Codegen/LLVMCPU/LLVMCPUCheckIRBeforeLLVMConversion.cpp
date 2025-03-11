@@ -34,14 +34,17 @@ struct LLVMCPUCheckIRBeforeLLVMConversionPass
 };
 } // namespace
 
-/// Returns success if the cummulative stack allocation size is less than the
-/// limit set by clMaxAllocationSizeInBytes.
+/// Returns success if the cumulative stack allocation size is less than the
+/// limit set through --iree-llvmcpu-stack-allocation-limit (or the default
+/// defined for HAL LLVMCPU target).
 static LogicalResult
 checkStackAllocationSize(mlir::FunctionOpInterface funcOp) {
   if (funcOp.getFunctionBody().empty())
     return success();
 
-  unsigned maxAllocationSizeInBytes = 32768;
+  // In rare cases where the attribute is not present in the module, a value of
+  // 32KB will be taken.
+  unsigned maxAllocationSizeInBytes = 32 * 1024;
   auto targetAttr = IREE::HAL::ExecutableTargetAttr::lookup(funcOp);
   if (targetAttr) {
     auto nativeAllocationSizeAttr =
@@ -99,8 +102,8 @@ checkStackAllocationSize(mlir::FunctionOpInterface funcOp) {
   }
   if (cumSize > maxAllocationSizeInBytes) {
     return funcOp.emitOpError("exceeded stack allocation limit of ")
-           << maxAllocationSizeInBytes << " bytes for function. Got "
-           << cumSize << " bytes";
+           << maxAllocationSizeInBytes << " bytes for function. Got " << cumSize
+           << " bytes";
   }
   return success();
 }
