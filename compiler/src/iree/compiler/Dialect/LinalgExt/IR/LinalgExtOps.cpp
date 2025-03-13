@@ -410,9 +410,9 @@ LogicalResult ScanOp::verify() {
   auto outputType = cast<ShapedType>(getOutput().getType());
   ArrayRef<int64_t> inputShapes = inputType.getShape();
   ArrayRef<int64_t> outputShapes = outputType.getShape();
-  if (accumulatorType.getElementType() != inputType.getElementType()) {
+  if (accumulatorType.getElementType() != outputType.getElementType()) {
     return op->emitOpError(
-        "expected input/accumulator element types to be identical");
+        "expected output/accumulator element types to be identical");
   }
   ArrayRef<int64_t> accumulatorShape = accumulatorType.getShape();
   int64_t accumulatorRank = accumulatorType.getRank();
@@ -433,10 +433,6 @@ LogicalResult ScanOp::verify() {
                             std::get<0>(s) != std::get<1>(s);
                    })) {
     return op->emitOpError("incompatible input/accumulator shapes");
-  }
-  if (inputType.getElementType() != outputType.getElementType()) {
-    return op->emitOpError(
-        "expected input/output element types to be identical");
   }
   if (inputShapes.size() != outputShapes.size()) {
     return op->emitOpError("expected input/output to have identical ranks");

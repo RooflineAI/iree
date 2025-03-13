@@ -10,6 +10,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/Utils.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -691,7 +692,11 @@ LogicalResult ScanOp::generateScalarImplementation(OpBuilder &b, Location loc,
       loc, cond,
       [&](OpBuilder &b, Location loc) {
         if (isInclusive) {
-          auto value = b.create<memref::LoadOp>(loc, getInput(), indices);
+          auto load = b.create<memref::LoadOp>(loc, getInput(), indices);
+          auto outputDtype =
+              cast<ShapedType>(getOutput().getType()).getElementType();
+          Value value = mlir::convertScalarToDtype(b, loc, load, outputDtype,
+                                                   /*isUnsignedCast=*/false);
           b.create<memref::StoreOp>(loc, value, getOutput(), indices);
         } else {
           auto value =
