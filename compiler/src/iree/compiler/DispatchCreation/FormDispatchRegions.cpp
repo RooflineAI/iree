@@ -771,8 +771,8 @@ decideFusableLinalgOps(Region &region, DominanceInfo const &dominanceInfo,
   // access the positive results of those checks (i.e. explicit assignment to
   // the fusion group). We should consider assigning *all* operations to fusion
   // groups during the fuseRootsWith...() phase, creating new groups for more
-  // negative fusio cases and potentially eliding the second iteration over the
-  // region altogether.
+  // negative fusion cases, and potentially eliding the second iteration over
+  // the region altogether.
   for (Block &block : region) {
     SmallVector<Operation *> roots;
     for (Operation &op : llvm::reverse(block)) {
