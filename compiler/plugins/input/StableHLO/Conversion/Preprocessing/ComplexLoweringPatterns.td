@@ -70,6 +70,9 @@ def : Pat<(StableHLO_AbsOp HLO_ComplexTensor:$val),
               (StableHLO_MulOp (StableHLO_RealOp:$real $val), $real),
               (StableHLO_MulOp (StableHLO_ImagOp:$imag $val), $imag)))>;
 
+def StableHLO_ConstDefaultResultAccuracyAttr :
+  ConstantAttr<StableHLO_ResultAccuracyAttr, "::mlir::stablehlo::ResultAccuracyMode::DEFAULT">;
+
 // Can deconstruct sin(a + ib) as follows:
 //   sin(a) * cosh(b) + icos(a) * sinh(b)
 //   sinh(b) = (e^x - e^-x) / 2
@@ -80,8 +83,8 @@ def : Pat<(StableHLO_SineOp HLO_ComplexTensor:$val),
                 (StableHLO_MulOp
                   (StableHLO_SineOp (StableHLO_RealOp:$real $val)),
                   (StableHLO_AddOp
-                    (StableHLO_ExpOp:$exp (StableHLO_ImagOp:$imag $val)),
-                    (StableHLO_ExpOp:$nexp (StableHLO_NegOp $imag)))),
+                    (StableHLO_ExpOp:$exp (StableHLO_ImagOp:$imag $val), StableHLO_ConstDefaultResultAccuracyAttr),
+                    (StableHLO_ExpOp:$nexp (StableHLO_NegOp $imag), StableHLO_ConstDefaultResultAccuracyAttr))),
                  (StableHLO_ConstantOp : $two (ConstantSplat<"2.0"> $real))),
               (StableHLO_DivOp
                 (StableHLO_MulOp
@@ -98,8 +101,8 @@ def : Pat<(StableHLO_CosineOp HLO_ComplexTensor:$val),
                 (StableHLO_MulOp
                   (StableHLO_CosineOp (StableHLO_RealOp:$real $val)),
                   (StableHLO_AddOp
-                    (StableHLO_ExpOp:$exp (StableHLO_ImagOp:$imag $val)),
-                    (StableHLO_ExpOp:$nexp (StableHLO_NegOp $imag)))),
+                    (StableHLO_ExpOp:$exp (StableHLO_ImagOp:$imag $val), StableHLO_ConstDefaultResultAccuracyAttr),
+                    (StableHLO_ExpOp:$nexp (StableHLO_NegOp $imag), StableHLO_ConstDefaultResultAccuracyAttr))),
                  (StableHLO_ConstantOp : $two (ConstantSplat<"2.0"> $real))),
               (StableHLO_DivOp
                 (StableHLO_MulOp
@@ -114,11 +117,11 @@ def : Pat<(StableHLO_CosineOp HLO_ComplexTensor:$val),
 class StableHLO_ComparisonDirectionValue<string enumStr> :
   ConstantAttr<StableHLO_ComparisonDirectionAttr, "::mlir::stablehlo::ComparisonDirection::" # enumStr>;
 
-def : Pat<(StableHLO_ExpOp HLO_ComplexTensor:$val),
+def : Pat<(StableHLO_ExpOp HLO_ComplexTensor:$val, StableHLO_ConstDefaultResultAccuracyAttr),
           (StableHLO_ComplexOp
            (StableHLO_MulOp
             (StableHLO_CosineOp (StableHLO_ImagOp:$imag $val)),
-            (StableHLO_ExpOp:$exp (StableHLO_RealOp:$real $val))),
+            (StableHLO_ExpOp:$exp (StableHLO_RealOp:$real $val), StableHLO_ConstDefaultResultAccuracyAttr)),
            (StableHLO_MulOp (StableHLO_SineOp $imag), $exp))>;
 
 foreach pair = [[StableHLO_ComparisonDirectionValue<"NE">, StableHLO_OrOp],
