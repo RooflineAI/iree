@@ -45,7 +45,7 @@ cc_test(
         "iree/compiler/loader/loader_test.c",
     ],
     args = [
-        "lib/libIREECompiler.so",
+        "$(WORKSPACE_ROOT)/lib/libIREECompiler.so",
     ],
     data = [
         "//lib:libIREECompiler.so",
@@ -55,4 +55,6 @@ cc_test(
         ":headers",
         ":loader",
     ],
+    toolchains = ["//:workspace_root"],
 )
+
