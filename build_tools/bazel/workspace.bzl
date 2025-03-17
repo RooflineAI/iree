@@ -26,7 +26,7 @@ def cuda_auto_configure_impl(repository_ctx):
     cuda_toolkit_root = None
 
     script_file = repository_ctx.attr.script
-    if script_file and False:
+    if script_file:
         # Only support Linux and Windows.
         # (Assuming repository_ctx.os.name returns a lowercase string like "linux" or "windows".)
         if repository_ctx.os.name.lower() not in ["linux", "windows"]:
