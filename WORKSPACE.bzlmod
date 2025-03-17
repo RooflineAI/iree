@@ -1,0 +1,149 @@
+# Copyright 2019 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Workspace file for the IREE project.
+# buildozer: disable=positional-args
+
+workspace(name = "iree_core")
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
+
+###############################################################################
+# Skylib
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "74d544d96f4a5bb630d465ca8bbcfe231e3594e5aae57e1edbf17a6eb3ca2506",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.3.0/bazel-skylib-1.3.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.3.0/bazel-skylib-1.3.0.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
+###############################################################################
+
+###############################################################################
+# llvm-project
+
+new_local_repository(
+    name = "llvm-raw",
+    build_file_content = "# empty",
+    path = "third_party/llvm-project",
+)
+
+load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
+
+llvm_configure(
+    name = "llvm-project",
+    # Keep this in sync with the targets in iree_llvm.cmake.
+    targets = [
+        "AArch64",
+        "ARM",
+        "RISCV",
+        "X86",
+        "NVPTX",
+        "AMDGPU",
+        "WebAssembly",
+    ],
+)
+
+###############################################################################
+
+###############################################################################
+# All other IREE submodule dependencies
+
+load("//build_tools/bazel:workspace.bzl", "configure_iree_cuda_deps", "configure_iree_submodule_deps")
+
+configure_iree_submodule_deps()
+
+configure_iree_cuda_deps(script = "//:third-party/nvidia_sdk_download/fetch_cuda_toolkit.py")
+
+###############################################################################
+maybe(
+    http_archive,
+    name = "llvm_zlib",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:zlib-ng.BUILD",
+    sha256 = "e36bb346c00472a1f9ff2a0a4643e590a254be6379da7cddd9daeb9a7f296731",
+    strip_prefix = "zlib-ng-2.0.7",
+    urls = [
+        "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.0.7.zip",
+    ],
+)
+
+###############################################################################
+maybe(
+    http_archive,
+    name = "llvm_zstd",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:zstd.BUILD",
+    sha256 = "7c42d56fac126929a6a85dbc73ff1db2411d04f104fae9bdea51305663a83fd0",
+    strip_prefix = "zstd-1.5.2",
+    urls = [
+        "https://github.com/facebook/zstd/releases/download/v1.5.2/zstd-1.5.2.tar.gz",
+    ],
+)
+
+maybe(
+    http_archive,
+    name = "robin_map",
+    strip_prefix = "robin-map-1.3.0",
+    sha256 = "a8424ad3b0affd4c57ed26f0f3d8a29604f0e1f2ef2089f497f614b1c94c7236",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:robin_map.BUILD",
+    url = "https://github.com/Tessil/robin-map/archive/refs/tags/v1.3.0.tar.gz",
+)
+
+maybe(
+    http_archive,
+    name = "nanobind",
+    build_file = "@llvm-raw//utils/bazel/third_party_build:nanobind.BUILD",
+    sha256 = "bb35deaed7efac5029ed1e33880a415638352f757d49207a8e6013fefb6c49a7",
+    strip_prefix = "nanobind-2.4.0",
+    url = "https://github.com/wjakob/nanobind/archive/refs/tags/v2.4.0.tar.gz",
+)
+
+maybe(
+    http_archive,
+    name = "rules_python",
+    sha256 = "4f7e2aa1eb9aa722d96498f5ef514f426c1f55161c3c9ae628c857a7128ceb07",
+    strip_prefix = "rules_python-1.0.0",
+    url = "https://github.com/bazelbuild/rules_python/releases/download/1.0.0/rules_python-1.0.0.tar.gz",
+)
+
+load("@rules_python//python:repositories.bzl", "py_repositories", "python_register_toolchains")
+
+py_repositories()
+
+python_register_toolchains(
+    name = "python_3_11",
+    python_version = "3.11",
+)
+
+load("@rules_python//python:pip.bzl", "pip_parse")
+
+pip_parse(
+    name = "pypi",
+    requirements_lock = "//runtime:requirements.txt"
+)
+
+load("@pypi//:requirements.bzl", "install_deps")
+
+install_deps()
+
+# new_local_repository(
+#     name = "numpy_headers",
+#     # This path points to where rules_python unpacks NumPy. Adjust for your environment:
+#     path = "external/py_deps/pypi__numpy/numpy/core/include",
+#     build_file_content = """
+# filegroup(
+#     name = "includes",
+#     srcs = glob(["**/*.h"]),
+#     visibility = ["//visibility:public"],
+# )
+# """,
+# )
+

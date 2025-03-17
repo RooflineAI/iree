@@ -128,7 +128,7 @@ def iree_bitcode_library(
                     "-isystem $(BINDIR)/%s" % builtin_headers_path,
                     " ".join(base_copts + copts),
                     " ".join(["-I $(BINDIR)/runtime/src"]),
-                    " ".join(["-I runtime/src"]),
+                    " ".join(["-I $(WORKSPACE_ROOT)/runtime/src"]),
                     "-o $(location %s)" % (bitcode_out),
                     "$(location %s)" % (src),
                 ]),
@@ -138,6 +138,7 @@ def iree_bitcode_library(
             ],
             message = "Compiling %s to %s..." % (src, bitcode_out),
             output_to_bindir = 1,
+            toolchains = ["//:workspace_root"],
             **kwargs
         )
 
@@ -322,13 +323,14 @@ def iree_amdgpu_bitcode_library(
             "$(location %s)" % (clang_tool),
             "$(location %s)" % (src),
             "-o $(location %s)" % (out),
-            "-I .",
+            "-I $(WORKSPACE_ROOT)",
         ] + base_copts + copts),
         tools = [
             clang_tool,
         ],
         message = "Compiling %s to %s..." % (src, out),
         output_to_bindir = 1,
+        toolchains = ["//:workspace_root"],
         **kwargs
     )
 
