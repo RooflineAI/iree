@@ -17,7 +17,6 @@ if(IREE_INPUT_TOSA)
 endif()
 
 if(IREE_TARGET_BACKEND_CUDA)
-  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/target/CellarCUDA target/CellarCUDA)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/target/CUDA target/CUDA)
 endif()
 

@@ -53,7 +53,6 @@ iree_compiler_cc_library(
         "@patio//roofexplorer:registration",
         "@patio//roofqx:registration",
         "//compiler/plugins/target/CUDA",
-        "//compiler/plugins/target/CellarCUDA",
         "//compiler/plugins/target/LLVMCPU",
         "//compiler/plugins/target/MetalSPIRV",
         "//compiler/plugins/target/ROCM",
