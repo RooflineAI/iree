@@ -819,6 +819,23 @@ static bool isScatterIndicesGenerator(Operation *op) {
   return false;
 }
 
+static bool hasExplicitNonFusableUsers(Operation *op) {
+  bool hasNonFusableUse = false;
+  for (Operation *user : op->getUsers()) {
+    if (isa<IREE::LinalgExt::LinalgFusionOpInterface>(user))
+      continue;
+    // TODO: The issue with iree_linalg_ext.scan compared to other non-fusable
+    // ops comes down to poor support in tiling configs, leading to overly large
+    // stack-bound allocations. In practice, backend compilers should often cope
+    // with fusing the resulting loops even without Linalg-level fusion.
+    // So long-term, we improve the tiling logic for ScanOp's, while also
+    // considering ways to express simple fusions within this cumulative
+    // reduction intrinsic.
+    hasNonFusableUse |= isa<IREE::LinalgExt::ScanOp>(user);
+  }
+  return hasNonFusableUse;
+}
+
 /// Operations that are cloned into dispatch regions formed with other
 /// operations as roots.
 bool isClonableIntoDispatchOp(Operation *op,
@@ -834,6 +851,11 @@ bool isClonableIntoDispatchOp(Operation *op,
           tensor::EmptyOp, tensor::ExtractOp, tensor::ExtractSliceOp,
           complex::CreateOp, IREE::Encoding::UnsetEncodingOp>(op)) {
     return true;
+  }
+  // TODO: Tune the cases excluded through hasFusableOrLowMemoryUsers
+  // condition in a more targeted manner, then remove the condition.
+  if (isa<linalg::LinalgOp>(op) && hasExplicitNonFusableUsers(op)) {
+    return false;
   }
   if (LinalgExt::isBitExtendOp(op)) {
     return true;
