@@ -52,6 +52,7 @@ iree_compiler_cc_library(
         # For now, we just hard include all in-tree plugins.
         "@patio//roofexplorer:registration",
         "@patio//roofqx:registration",
+        "@patio//target/CellarCUDA:CellarCUDA",
         "//compiler/plugins/target/CUDA",
         "//compiler/plugins/target/LLVMCPU",
         "//compiler/plugins/target/MetalSPIRV",
