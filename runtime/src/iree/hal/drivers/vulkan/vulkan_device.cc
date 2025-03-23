@@ -488,7 +488,6 @@ static iree_status_t iree_hal_vulkan_build_queue_sets(
 
 typedef struct iree_hal_vulkan_device_t {
   iree_hal_resource_t resource;
-  iree_string_view_t identifier;
 
   // Optional driver that owns the instance. We retain it for our lifetime to
   // ensure the instance remains valid.
@@ -719,12 +718,14 @@ static iree_status_t iree_hal_vulkan_device_create_internal(
   device->driver = driver;
   iree_hal_driver_retain(device->driver);
   uint8_t* buffer_ptr = (uint8_t*)device + sizeof(*device);
+  device->device_properties = *device_properties;
   buffer_ptr += iree_string_view_append_to_buffer(
-      identifier, &device->identifier, (char*)buffer_ptr);
+      identifier, &device->device_properties.device_info.identifier,
+      (char*)buffer_ptr);
   device->flags = options->flags;
 
   device->device_extensions = *device_extensions;
-  device->device_properties = *device_properties;
+
   device->instance = instance;
   device->physical_device = physical_device;
   device->logical_device = logical_device;
@@ -919,6 +920,9 @@ static iree_status_t iree_hal_vulkan_query_device_properties(
   physical_device_properties.sType =
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
   physical_device_properties.pNext = NULL;
+
+  out_properties->device_info = iree_hal_device_info_t{
+      .device_id = physical_device_properties.properties.deviceID};
 
   // + Subgroup properties.
   VkPhysicalDeviceSubgroupProperties subgroup_properties;
@@ -1389,7 +1393,13 @@ IREE_API_EXPORT iree_status_t iree_hal_vulkan_wrap_device(
 static iree_string_view_t iree_hal_vulkan_device_id(
     iree_hal_device_t* base_device) {
   iree_hal_vulkan_device_t* device = iree_hal_vulkan_device_cast(base_device);
-  return device->identifier;
+  return device->device_properties.device_info.identifier;
+}
+
+static iree_hal_device_info_t iree_hal_vulkan_device_info(
+    iree_hal_device_t* base_device) {
+  iree_hal_vulkan_device_t* device = iree_hal_vulkan_device_cast(base_device);
+  return device->device_properties.device_info;
 }
 
 static iree_allocator_t iree_hal_vulkan_device_host_allocator(
@@ -1434,8 +1444,10 @@ static iree_status_t iree_hal_vulkan_device_query_i64(
   *out_value = 0;
 
   if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
-    *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
+    *out_value = iree_string_view_match_pattern(
+                     device->device_properties.device_info.identifier, key)
+                     ? 1
+                     : 0;
     return iree_ok_status();
   }
 
@@ -1665,9 +1677,9 @@ static iree_status_t iree_hal_vulkan_device_queue_read(
   // TODO: expose streaming chunk count/size options.
   iree_status_t loop_status = iree_ok_status();
   iree_hal_file_transfer_options_t options = {
-      /*.loop=*/iree_loop_inline(&loop_status),
-      /*.chunk_count=*/IREE_HAL_FILE_TRANSFER_CHUNK_COUNT_DEFAULT,
-      /*.chunk_size=*/IREE_HAL_FILE_TRANSFER_CHUNK_SIZE_DEFAULT,
+      .loop = iree_loop_inline(&loop_status),
+      .chunk_count = IREE_HAL_FILE_TRANSFER_CHUNK_COUNT_DEFAULT,
+      .chunk_size = IREE_HAL_FILE_TRANSFER_CHUNK_SIZE_DEFAULT,
   };
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_read_streaming(
       base_device, queue_affinity, wait_semaphore_list, signal_semaphore_list,
@@ -1686,9 +1698,9 @@ static iree_status_t iree_hal_vulkan_device_queue_write(
   // TODO: expose streaming chunk count/size options.
   iree_status_t loop_status = iree_ok_status();
   iree_hal_file_transfer_options_t options = {
-      /*.loop=*/iree_loop_inline(&loop_status),
-      /*.chunk_count=*/IREE_HAL_FILE_TRANSFER_CHUNK_COUNT_DEFAULT,
-      /*.chunk_size=*/IREE_HAL_FILE_TRANSFER_CHUNK_SIZE_DEFAULT,
+      .loop = iree_loop_inline(&loop_status),
+      .chunk_count = IREE_HAL_FILE_TRANSFER_CHUNK_COUNT_DEFAULT,
+      .chunk_size = IREE_HAL_FILE_TRANSFER_CHUNK_SIZE_DEFAULT,
   };
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_write_streaming(
       base_device, queue_affinity, wait_semaphore_list, signal_semaphore_list,
@@ -1742,12 +1754,12 @@ static iree_status_t iree_hal_vulkan_device_queue_execute(
 
   if (iree_status_is_ok(status)) {
     iree_hal_vulkan_submission_batch_t batch = {
-        /*.wait_semaphores=*/wait_semaphore_list,
-        /*.command_buffer_count=*/
-        (iree_host_size_t)(translated_command_buffer ? 1 : 0),
-        /*.command_buffers=*/
-        translated_command_buffer ? &translated_command_buffer : NULL,
-        /*.signal_semaphores=*/signal_semaphore_list,
+        .wait_semaphores = wait_semaphore_list,
+        .command_buffer_count =
+            (iree_host_size_t)(translated_command_buffer ? 1 : 0),
+        .command_buffers =
+            translated_command_buffer ? &translated_command_buffer : NULL,
+        .signal_semaphores = signal_semaphore_list,
     };
     status = queue->Submit(1, &batch);
   }
@@ -1869,35 +1881,34 @@ static iree_status_t iree_hal_vulkan_device_profiling_end(
 
 namespace {
 const iree_hal_device_vtable_t iree_hal_vulkan_device_vtable = {
-    /*.destroy=*/iree_hal_vulkan_device_destroy,
-    /*.id=*/iree_hal_vulkan_device_id,
-    /*.host_allocator=*/iree_hal_vulkan_device_host_allocator,
-    /*.device_allocator=*/iree_hal_vulkan_device_allocator,
-    /*.replace_device_allocator=*/iree_hal_vulkan_replace_device_allocator,
-    /*.replace_channel_provider=*/iree_hal_vulkan_replace_channel_provider,
-    /*.trim=*/iree_hal_vulkan_device_trim,
-    /*.query_i64=*/iree_hal_vulkan_device_query_i64,
-    /*.create_channel=*/iree_hal_vulkan_device_create_channel,
-    /*.create_command_buffer=*/iree_hal_vulkan_device_create_command_buffer,
-    /*.create_event=*/iree_hal_vulkan_device_create_event,
-    /*.create_executable_cache=*/
-    iree_hal_vulkan_device_create_executable_cache,
-    /*.import_file=*/iree_hal_vulkan_device_import_file,
-    /*.create_semaphore=*/iree_hal_vulkan_device_create_semaphore,
-    /*.query_semaphore_compatibility=*/
-    iree_hal_vulkan_device_query_semaphore_compatibility,
-    /*.queue_alloca=*/iree_hal_vulkan_device_queue_alloca,
-    /*.queue_dealloca=*/iree_hal_vulkan_device_queue_dealloca,
-    /*.queue_fill=*/iree_hal_device_queue_emulated_fill,
-    /*.queue_update=*/iree_hal_device_queue_emulated_update,
-    /*.queue_copy=*/iree_hal_device_queue_emulated_copy,
-    /*.queue_read=*/iree_hal_vulkan_device_queue_read,
-    /*.queue_write=*/iree_hal_vulkan_device_queue_write,
-    /*.queue_execute=*/iree_hal_vulkan_device_queue_execute,
-    /*.queue_flush=*/iree_hal_vulkan_device_queue_flush,
-    /*.wait_semaphores=*/iree_hal_vulkan_device_wait_semaphores,
-    /*.profiling_begin=*/iree_hal_vulkan_device_profiling_begin,
-    /*.profiling_flush=*/iree_hal_vulkan_device_profiling_flush,
-    /*.profiling_end=*/iree_hal_vulkan_device_profiling_end,
+    .destroy = iree_hal_vulkan_device_destroy,
+    .id = iree_hal_vulkan_device_id,
+    .host_allocator = iree_hal_vulkan_device_host_allocator,
+    .device_allocator = iree_hal_vulkan_device_allocator,
+    .replace_device_allocator = iree_hal_vulkan_replace_device_allocator,
+    .replace_channel_provider = iree_hal_vulkan_replace_channel_provider,
+    .trim = iree_hal_vulkan_device_trim,
+    .query_i64 = iree_hal_vulkan_device_query_i64,
+    .create_channel = iree_hal_vulkan_device_create_channel,
+    .create_command_buffer = iree_hal_vulkan_device_create_command_buffer,
+    .create_event = iree_hal_vulkan_device_create_event,
+    .create_executable_cache = iree_hal_vulkan_device_create_executable_cache,
+    .import_file = iree_hal_vulkan_device_import_file,
+    .create_semaphore = iree_hal_vulkan_device_create_semaphore,
+    .query_semaphore_compatibility =
+        iree_hal_vulkan_device_query_semaphore_compatibility,
+    .queue_alloca = iree_hal_vulkan_device_queue_alloca,
+    .queue_dealloca = iree_hal_vulkan_device_queue_dealloca,
+    .queue_fill = iree_hal_device_queue_emulated_fill,
+    .queue_update = iree_hal_device_queue_emulated_update,
+    .queue_copy = iree_hal_device_queue_emulated_copy,
+    .queue_read = iree_hal_vulkan_device_queue_read,
+    .queue_write = iree_hal_vulkan_device_queue_write,
+    .queue_execute = iree_hal_vulkan_device_queue_execute,
+    .queue_flush = iree_hal_vulkan_device_queue_flush,
+    .wait_semaphores = iree_hal_vulkan_device_wait_semaphores,
+    .profiling_begin = iree_hal_vulkan_device_profiling_begin,
+    .profiling_flush = iree_hal_vulkan_device_profiling_flush,
+    .profiling_end = iree_hal_vulkan_device_profiling_end,
 };
 }  // namespace

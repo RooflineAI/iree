@@ -77,6 +77,10 @@ typedef struct iree_hal_device_info_t {
   iree_string_view_t path;
   // Human-readable name of the device as returned by the API.
   iree_string_view_t name;
+  // Device identifier.
+  // This identifier may vary based on the runtime device type; for example, a
+  // Vulkan device may set `vulkan-v1.1` or `vulkan-v1.2-spec1`.
+  iree_string_view_t identifier;
 } iree_hal_device_info_t;
 
 // Defines what information is captured during profiling.
@@ -182,6 +186,10 @@ IREE_API_EXPORT void iree_hal_device_release(iree_hal_device_t* device);
 // Vulkan device may return `vulkan-v1.1` or `vulkan-v1.2-spec1`.
 IREE_API_EXPORT iree_string_view_t
 iree_hal_device_id(iree_hal_device_t* device);
+
+// Returns the device info. (Also see iree_hal_device_id).
+IREE_API_EXPORT iree_hal_device_info_t
+iree_hal_device_info(iree_hal_device_t* device);
 
 // Returns the host allocator used for objects.
 IREE_API_EXPORT iree_allocator_t
@@ -528,6 +536,7 @@ typedef struct iree_hal_device_vtable_t {
   void(IREE_API_PTR* destroy)(iree_hal_device_t* device);
 
   iree_string_view_t(IREE_API_PTR* id)(iree_hal_device_t* device);
+  iree_hal_device_info_t(IREE_API_PTR* info)(iree_hal_device_t* device);
 
   iree_allocator_t(IREE_API_PTR* host_allocator)(iree_hal_device_t* device);
   iree_hal_allocator_t*(IREE_API_PTR* device_allocator)(
