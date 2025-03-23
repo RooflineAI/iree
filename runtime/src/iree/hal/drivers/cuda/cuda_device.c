@@ -39,7 +39,7 @@ typedef struct iree_hal_cuda_device_t {
   // Abstract resource used for injecting reference counting and vtable;
   // must be at offset 0.
   iree_hal_resource_t resource;
-  iree_string_view_t identifier;
+  iree_hal_device_info_t info;
 
   // Block pool used for command buffers with a larger block size (as command
   // buffers can contain inlined data uploads).
@@ -407,8 +407,9 @@ static iree_status_t iree_hal_cuda_device_create_internal(
       iree_allocator_malloc(host_allocator, total_size, (void**)&device));
 
   iree_hal_resource_initialize(&iree_hal_cuda_device_vtable, &device->resource);
+  device->info = (struct iree_hal_device_info_t)(.device_id = cu_device);
   iree_string_view_append_to_buffer(
-      identifier, &device->identifier,
+      identifier, &device->info.identifier,
       (char*)device + iree_sizeof_struct(*device));
   iree_arena_block_pool_initialize(params->arena_block_size, host_allocator,
                                    &device->block_pool);
@@ -476,8 +477,8 @@ static iree_status_t iree_hal_cuda_device_create_internal(
 
     status = iree_hal_stream_tracing_context_allocate(
         (iree_hal_stream_tracing_device_interface_t*)tracing_device_interface,
-        device->identifier, device->params.stream_tracing, &device->block_pool,
-        host_allocator, &device->tracing_context);
+        device->info.identifier, device->params.stream_tracing,
+        &device->block_pool, host_allocator, &device->tracing_context);
   }
 
   // Memory pool support is conditional.
@@ -653,7 +654,13 @@ static void iree_hal_cuda_device_destroy(iree_hal_device_t* base_device) {
 static iree_string_view_t iree_hal_cuda_device_id(
     iree_hal_device_t* base_device) {
   iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
-  return device->identifier;
+  return device->info.identifier;
+}
+
+static iree_hal_device_info_t iree_hal_cuda_device_info(
+    iree_hal_device_t* base_device) {
+  iree_hal_cuda_device_t* device = iree_hal_cuda_device_cast(base_device);
+  return device->info;
 }
 
 static iree_allocator_t iree_hal_cuda_device_host_allocator(
@@ -715,7 +722,7 @@ static iree_status_t iree_hal_cuda_device_query_i64(
 
   if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
     *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
+        iree_string_view_match_pattern(device->info.identifier, key) ? 1 : 0;
     return iree_ok_status();
   }
 
@@ -1107,6 +1114,7 @@ static iree_status_t iree_hal_cuda_device_profiling_end(
 static const iree_hal_device_vtable_t iree_hal_cuda_device_vtable = {
     .destroy = iree_hal_cuda_device_destroy,
     .id = iree_hal_cuda_device_id,
+    .info = iree_hal_cuda_device_info,
     .host_allocator = iree_hal_cuda_device_host_allocator,
     .device_allocator = iree_hal_cuda_device_allocator,
     .replace_device_allocator = iree_hal_cuda_replace_device_allocator,
