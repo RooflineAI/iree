@@ -169,6 +169,8 @@ typedef struct iree_hal_vulkan_device_properties_t {
 
   // Device limits.
   iree_hal_vulkan_device_limits_t limits;
+  // Device info.
+  iree_hal_device_info_t device_info;
 } iree_hal_vulkan_iree_hal_vulkan_device_properties_t;
 
 #endif  // IREE_HAL_DRIVERS_VULKAN_EXTENSIBILITY_UTIL_H_

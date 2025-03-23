@@ -51,7 +51,7 @@ typedef struct iree_hal_hip_device_t {
   // Abstract resource used for injecting reference counting and vtable;
   // must be at offset 0.
   iree_hal_resource_t resource;
-  iree_string_view_t identifier;
+  iree_hal_device_info_t info;
 
   // Block pool used for command buffers with a larger block size (as command
   // buffers can contain inlined data uploads).
@@ -277,7 +277,13 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
       sizeof(iree_hal_hip_per_device_info_t) * device->device_count;
 
   iree_hal_resource_initialize(&iree_hal_hip_device_vtable, &device->resource);
-  iree_string_view_append_to_buffer(identifier, &device->identifier,
+  if (device->device_count == 1) {
+    device->info =
+        iree_hal_device_info_t(.device_id = device->devices[0].hip_device);
+  } else {
+    device->info = iree_hal_device_info_t(.device_id = -1);
+  }
+  iree_string_view_append_to_buffer(identifier, &device->info.identifier,
                                     (char*)device + identifier_offset);
   iree_arena_block_pool_initialize(params->arena_block_size, host_allocator,
                                    &device->block_pool);
@@ -314,7 +320,7 @@ static iree_status_t iree_hal_hip_device_initialize_internal(
       }
       status = iree_hal_stream_tracing_context_allocate(
           (iree_hal_stream_tracing_device_interface_t*)tracing_device_interface,
-          device->identifier, device->params.stream_tracing,
+          device->info.identifier, device->params.stream_tracing,
           &device->block_pool, host_allocator,
           &device->devices[i].tracing_context);
       status = IREE_HIP_CALL_TO_STATUS(symbols, hipCtxPopCurrent(NULL));
@@ -572,7 +578,7 @@ static void iree_hal_hip_device_destroy(iree_hal_device_t* base_device) {
 static iree_string_view_t iree_hal_hip_device_id(
     iree_hal_device_t* base_device) {
   iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
-  return device->identifier;
+  return device->info.identifier;
 }
 
 static iree_allocator_t iree_hal_hip_device_host_allocator(
@@ -639,7 +645,7 @@ static iree_status_t iree_hal_hip_device_query_i64(
 
   if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
     *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
+        iree_string_view_match_pattern(device->info.identifier, key) ? 1 : 0;
     return iree_ok_status();
   }
 

@@ -23,7 +23,7 @@
 
 typedef struct iree_hal_sync_device_t {
   iree_hal_resource_t resource;
-  iree_string_view_t identifier;
+  iree_hal_device_info_t info;
 
   iree_allocator_t host_allocator;
   iree_hal_allocator_t* device_allocator;
@@ -92,7 +92,8 @@ iree_status_t iree_hal_sync_device_create(
     memset(device, 0, total_size);
     iree_hal_resource_initialize(&iree_hal_sync_device_vtable,
                                  &device->resource);
-    iree_string_view_append_to_buffer(identifier, &device->identifier,
+    device->info = (struct iree_hal_device_info_t){};
+    iree_string_view_append_to_buffer(identifier, &device->info.identifier,
                                       (char*)device + struct_size);
     device->host_allocator = host_allocator;
     device->device_allocator = device_allocator;
@@ -142,7 +143,13 @@ static void iree_hal_sync_device_destroy(iree_hal_device_t* base_device) {
 static iree_string_view_t iree_hal_sync_device_id(
     iree_hal_device_t* base_device) {
   iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
-  return device->identifier;
+  return device->info.identifier;
+}
+
+static iree_hal_device_info_t iree_hal_sync_device_info(
+    iree_hal_device_t* base_device) {
+  iree_hal_sync_device_t* device = iree_hal_sync_device_cast(base_device);
+  return device->info;
 }
 
 static iree_allocator_t iree_hal_sync_device_host_allocator(
@@ -186,7 +193,7 @@ static iree_status_t iree_hal_sync_device_query_i64(
 
   if (iree_string_view_equal(category, IREE_SV("hal.device.id"))) {
     *out_value =
-        iree_string_view_match_pattern(device->identifier, key) ? 1 : 0;
+        iree_string_view_match_pattern(device->info.identifier, key) ? 1 : 0;
     return iree_ok_status();
   }
 
@@ -481,6 +488,7 @@ static iree_status_t iree_hal_sync_device_profiling_end(
 static const iree_hal_device_vtable_t iree_hal_sync_device_vtable = {
     .destroy = iree_hal_sync_device_destroy,
     .id = iree_hal_sync_device_id,
+    .info = iree_hal_sync_device_info,
     .host_allocator = iree_hal_sync_device_host_allocator,
     .device_allocator = iree_hal_sync_device_allocator,
     .replace_device_allocator = iree_hal_sync_replace_device_allocator,

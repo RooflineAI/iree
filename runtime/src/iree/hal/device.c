@@ -27,6 +27,12 @@ iree_hal_device_id(iree_hal_device_t* device) {
   return _VTABLE_DISPATCH(device, id)(device);
 }
 
+IREE_API_EXPORT iree_hal_device_info_t
+iree_hal_device_info(iree_hal_device_t* device) {
+  IREE_ASSERT_ARGUMENT(device);
+  return _VTABLE_DISPATCH(device, info)(device);
+}
+
 IREE_API_EXPORT iree_allocator_t
 iree_hal_device_host_allocator(iree_hal_device_t* device) {
   IREE_ASSERT_ARGUMENT(device);
