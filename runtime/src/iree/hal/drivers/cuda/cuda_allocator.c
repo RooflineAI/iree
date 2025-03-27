@@ -569,7 +569,7 @@ static iree_status_t iree_hal_cuda_allocator_import_buffer(
         register_flags |= CU_MEMHOSTREGISTER_READ_ONLY;
       }
       // Some bug with cuda + docker that breaks pinned memory
-      // TODO: resolve this issue
+      // TODO (ROO-285): resolve this issue
       return iree_make_status(IREE_STATUS_UNAVAILABLE, "bug in cuda driver");
       status = IREE_CURESULT_TO_STATUS(
           allocator->symbols,
