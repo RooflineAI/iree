@@ -408,7 +408,7 @@ static iree_status_t iree_hal_cuda_device_create_internal(
       iree_allocator_malloc(host_allocator, total_size, (void**)&device));
 
   iree_hal_resource_initialize(&iree_hal_cuda_device_vtable, &device->resource);
-  device->info = (struct iree_hal_device_info_t)(.device_id = cu_device);
+  device->info = (struct iree_hal_device_info_t){.device_id = cu_device};
   iree_string_view_append_to_buffer(
       identifier, &device->info.identifier,
       (char*)device + iree_sizeof_struct(*device));
