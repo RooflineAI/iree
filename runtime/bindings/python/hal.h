@@ -17,6 +17,7 @@
 #include "./vm.h"
 #include "iree/base/string_view.h"
 #include "iree/hal/api.h"
+#include "iree/hal/buffer.h"
 #include "iree/modules/hal/debugging.h"
 
 namespace iree {
@@ -115,6 +116,7 @@ struct ApiPtrAdapter<iree_hal_command_buffer_t> {
 
 class HalBuffer;
 class HalSemaphore;
+class HalExternalBuffer;
 
 class HalBufferView
     : public ApiRefCounted<HalBufferView, iree_hal_buffer_view_t> {
@@ -141,9 +143,15 @@ class HalDevice : public ApiRefCounted<HalDevice, iree_hal_device_t> {
                     py::handle signal_semaphores);
   void QueueCopy(HalBuffer& src_buffer, HalBuffer& dst_buffer,
                  py::handle wait_semaphores, py::handle signal_semaphores);
-  HalBufferView FromDLPackCapsule(py::object capsule);
+  HalBufferView FromDLPackCapsule(
+      py::object capsule,
+      iree_hal_memory_type_t memory_type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+      iree_hal_memory_access_t memory_access = IREE_HAL_MEMORY_ACCESS_READ |
+                                               IREE_HAL_MEMORY_ACCESS_WRITE);
   py::object CreateDLPackCapsule(HalBufferView& bufferView,
                                  int device_type_code, int device_id);
+  py::object CreateDLPackCapsuleLikeDeviceInfo(HalBufferView& bufferView);
+  nanobind::tuple GetInfo();
 };
 
 class HalDriver : public ApiRefCounted<HalDriver, iree_hal_driver_t> {
@@ -187,7 +195,20 @@ class HalAllocator : public ApiRefCounted<HalAllocator, iree_hal_allocator_t> {
   py::object AllocateBufferCopy(int memory_type, int allowed_usage,
                                 HalDevice& device, py::object buffer,
                                 std::optional<uint64_t> element_type);
+  // Copy the contents of the |buffer_view| to a new buffer and return a view
+  // into the new buffer that is analogous to |buffer_view|.
+  py::object AllocateBufferViewCopy(int memory_type, int allowed_usage,
+                                    HalDevice& source_device,
+                                    HalDevice& target_device,
+                                    HalBufferView& source_buffer_view,
+                                    bool requires_target_buffer_import);
   HalBuffer AllocateHostStagingBufferCopy(HalDevice& device, py::handle buffer);
+  HalBuffer ImportBuffer(
+      HalExternalBuffer& external_buffer,
+      iree_hal_buffer_usage_t buffer_usage = IREE_HAL_BUFFER_USAGE_DEFAULT,
+      iree_hal_memory_access_t buffer_access = IREE_HAL_MEMORY_ACCESS_WRITE,
+      iree_hal_memory_type_t buffer_type = IREE_HAL_MEMORY_TYPE_DEVICE_VISIBLE);
+  HalExternalBuffer ExportBuffer(HalBuffer& buffer);
 };
 
 struct HalShape {
@@ -230,12 +251,25 @@ class HalBuffer : public ApiRefCounted<HalBuffer, iree_hal_buffer_t> {
     return HalBufferView::StealFromRawPtr(bv);
   }
 
+  HalBufferView CreateViewLike(HalBufferView& view) {
+    iree_hal_buffer_view_t* bv;
+    CheckApiStatus(iree_hal_buffer_view_create_like(
+                       raw_ptr(), view.raw_ptr(), iree_allocator_system(), &bv),
+                   "Error creating buffer view");
+    return HalBufferView::StealFromRawPtr(bv);
+  }
+
   static HalBuffer CreateFromBufferView(HalBufferView& bv) {
     return HalBuffer::BorrowFromRawPtr(
         iree_hal_buffer_view_buffer(bv.raw_ptr()));
   }
 
   py::str Repr();
+};
+
+class HalExternalBuffer {
+ public:
+  iree_hal_external_buffer_t buffer;
 };
 
 class HalSemaphore : public ApiRefCounted<HalSemaphore, iree_hal_semaphore_t> {
