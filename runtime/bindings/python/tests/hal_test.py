@@ -179,7 +179,7 @@ class DeviceHalTest(unittest.TestCase):
             "<HalBuffer 48 bytes (at offset 0 into 48), memory_type=DEVICE_LOCAL|HOST_VISIBLE, allowed_access=ALL, allowed_usage=TRANSFER|DISPATCH_STORAGE|MAPPING|MAPPING_PERSISTENT>",
         )
 
-    def testAllocateBufferViewCopy(self):
+    def testAllocateBufferCopyCreateView(self):
         ary = np.zeros([3, 4], dtype=np.int32) + 2
         buffer = self.allocator.allocate_buffer_copy(
             memory_type=iree.runtime.MemoryType.DEVICE_LOCAL,
@@ -193,6 +193,58 @@ class DeviceHalTest(unittest.TestCase):
             repr(buffer),
             "<HalBufferView (3, 4), element_type=0x20000011, 48 bytes (at offset 0 into 48), memory_type=DEVICE_LOCAL|HOST_VISIBLE, allowed_access=ALL, allowed_usage=TRANSFER|DISPATCH_STORAGE|MAPPING|MAPPING_PERSISTENT>",
         )
+
+    def testAllocateBufferViewCopy(self):
+        # Crerate an ndarray, copy it, and check if the copy is equal
+        ary = np.random.randint(low=0, high=666, size=[3, 4], dtype=np.int32)
+        buffer = self.allocator.allocate_buffer_copy(
+            memory_type=iree.runtime.MemoryType.DEVICE_LOCAL,
+            allowed_usage=iree.runtime.BufferUsage.DEFAULT,
+            device=self.device,
+            buffer=ary,
+        )
+
+        assert isinstance(buffer, iree.runtime.HalBuffer)
+        bv = iree.runtime.HalBufferView(
+            buffer, (3, 4), iree.runtime.HalElementType.INT_32
+        )
+
+        bv_copy1 = self.allocator.allocate_buffer_view_copy(
+            iree.runtime.MemoryType.DEVICE_LOCAL,
+            iree.runtime.BufferUsage.DEFAULT,
+            self.device,
+            self.device,
+            bv,
+        )
+
+        # NOTE: the exact bits set on type/usage/etc is implementation defined.
+        self.assertEqual(
+            repr(bv_copy1),
+            "<HalBufferView (3, 4), element_type=0x20000010, 48 bytes (at offset 0 into 48), memory_type=DEVICE_LOCAL|HOST_VISIBLE, allowed_access=READ|WRITE, allowed_usage=TRANSFER|DISPATCH_STORAGE|MAPPING|MAPPING_PERSISTENT>",
+        )
+        self.assertEqual(48, bv.byte_length)
+        ary_copy = iree.runtime.DeviceArray(self.device, bv_copy1).to_host()
+        np.testing.assert_array_equal(ary, ary_copy)
+
+        # Create a slice of the copied buffer and copy it, check for equality
+        bv_slice = iree.runtime.HalBufferView(
+            bv_copy1.get_buffer(), (1, 4), iree.runtime.HalElementType.INT_32
+        )
+
+        bv_slice_copy = self.allocator.allocate_buffer_view_copy(
+            iree.runtime.MemoryType.DEVICE_LOCAL,
+            iree.runtime.BufferUsage.DEFAULT,
+            self.device,
+            self.device,
+            bv_slice,
+        )
+
+        self.assertEqual(
+            repr(bv_slice_copy),
+            "<HalBufferView (1, 4), element_type=0x20000010, 16 bytes (at offset 0 into 16), memory_type=DEVICE_LOCAL|HOST_VISIBLE, allowed_access=READ|WRITE, allowed_usage=TRANSFER|DISPATCH_STORAGE|MAPPING|MAPPING_PERSISTENT>",
+        )
+        ary_copy = iree.runtime.DeviceArray(self.device, bv_slice_copy).to_host()
+        np.testing.assert_array_equal(ary[0, 0:4], ary_copy[0])
 
     def testAllocateHostStagingBufferCopy(self):
         buffer = self.allocator.allocate_host_staging_buffer_copy(
@@ -507,7 +559,7 @@ class DeviceDLPackTest(unittest.TestCase):
         gc.collect()
 
     def roundtrip(self, input_array, element_type):
-        # We have top copy the input array into our own buffer to ensure
+        # We have to copy the input array into our own buffer to ensure
         # alignment (dlpack import/export require aligned data).
         orig_bv = self.allocator.allocate_buffer_copy(
             memory_type=iree.runtime.MemoryType.DEVICE_LOCAL,
