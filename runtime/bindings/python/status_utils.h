@@ -12,6 +12,11 @@
 
 namespace iree {
 namespace python {
+struct GilEnsureGuard {
+  PyGILState_STATE state{PyGILState_Ensure()};
+
+  ~GilEnsureGuard() { PyGILState_Release(state); }
+};
 
 // Raises a value error with the given message.
 // Correct usage:
@@ -22,6 +27,8 @@ nanobind::python_error RaisePyError(PyObject* exc_class, const char* message);
 // Correct usage:
 //   throw RaiseValueError("Foobar'd");
 inline nanobind::python_error RaiseValueError(const char* message) {
+  GilEnsureGuard gil_guard{};
+
   return RaisePyError(PyExc_ValueError, message);
 }
 
@@ -34,11 +41,13 @@ inline void CheckApiStatus(iree_status_t status, const char* message) {
   if (iree_status_is_ok(status)) {
     return;
   }
+  GilEnsureGuard gil_guard{};
   throw ApiStatusToPyExc(status, message);
 }
 
 inline void CheckApiNotNull(const void* p, const char* message) {
   if (!p) {
+    GilEnsureGuard gil_guard{};
     throw RaiseValueError(message);
   }
 }
