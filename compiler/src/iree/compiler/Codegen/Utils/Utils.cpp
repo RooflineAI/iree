@@ -17,6 +17,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/LogicalResult.h"
 #include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -34,6 +35,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Interfaces/DestinationStyleOpInterface.h"
 #include "mlir/Interfaces/TilingInterface.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -930,6 +933,34 @@ getTiledAndDistributedLoopInfo(mlir::FunctionOpInterface funcOp) {
     }
   });
   return info;
+}
+
+void limitTileSizesPerDstStyleOps(DestinationStyleOpInterface rootOp,
+                                  uint64_t limitInBits,
+                                  SmallVector<int64_t> &tileSizes,
+                                  ArrayRef<bool> scalableTileFlags) {
+  auto getOperandSize = [](OpOperand &op) -> uint64_t {
+    auto TT = cast<TensorType>(op.get().getType());
+    auto eltSizeInBits =
+        (uint64_t)IREE::Util::getTypeBitWidth(TT.getElementType());
+    auto dims = TT.getShape();
+    return std::reduce(dims.begin(), dims.end(), eltSizeInBits,
+                       std::multiplies<int64_t>());
+  };
+
+  uint64_t jointSize = 0;
+  for (auto &op : rootOp.getDpsInitsMutable()) {
+    jointSize += getOperandSize(op);
+  }
+
+  unsigned exceedFactor = jointSize / limitInBits;
+  unsigned reduceFactor = 1;
+  for (auto &tileSizeRef : llvm::reverse(tileSizes)) {
+    while (reduceFactor < exceedFactor && tileSizeRef > 0 && tileSizeRef % 2 == 0) {
+      tileSizeRef /= 2;
+      reduceFactor *= 2;
+    }
+  }
 }
 
 void setSCFTileSizes(scf::SCFTilingOptions &options, TilingInterface op,
