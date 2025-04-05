@@ -384,6 +384,9 @@ def IREELinalgExt_ScanOp : IREELinalgExt_Op<"scan",
   let summary = "Scan operator";
   let description = [{
     Computes the inclusive/exclusive scan along a given dimension.
+
+    Numeric casting is allowed on the input operand, promoting it to the same
+    underlying element type as the output and accumulator.
   }];
 
   let arguments = (ins Variadic<AnyShaped>:$inputs,
