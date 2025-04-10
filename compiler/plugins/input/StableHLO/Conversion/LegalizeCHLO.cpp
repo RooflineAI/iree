@@ -2191,6 +2191,8 @@ struct LegalizeChlo final : impl::LegalizeChloBase<LegalizeChlo> {
 } // namespace
 
 namespace {
+using ::mlir::stablehlo::ResultAccuracyAttr;
+using ::mlir::stablehlo::ResultAccuracyModeAttr;
 #include "compiler/plugins/input/StableHLO/Conversion/CHLODecompositionPatterns.h.inc"
 } // end anonymous namespace
 
