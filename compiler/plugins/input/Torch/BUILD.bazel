@@ -18,7 +18,11 @@ iree_compiler_cc_library(
     ],
     deps = [
         "//compiler/plugins/input/Torch/InputConversion",
+        "@iree//compiler/src/iree/compiler/Dialect/Flow/IR",
+        "@iree//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@iree//compiler/src/iree/compiler/Dialect/LinalgExt/IR",
+        "@iree//compiler/src/iree/compiler/Dialect/Stream/IR",
+        "@iree//compiler/src/iree/compiler/Dialect/Util/IR",
         "@iree//compiler/src/iree/compiler/PluginAPI",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:MLProgramDialect",
