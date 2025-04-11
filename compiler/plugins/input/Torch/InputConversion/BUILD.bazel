@@ -29,8 +29,9 @@ iree_compiler_cc_library(
     name = "InputConversion",
     srcs = [
         "BindSymbolicShapes.cpp",
-        "BitCastQuantTensor.cpp",
+        "BitCastTensor.cpp",
         "ConvertTMTensorToLinalgExt.cpp",
+        "ConvertTorchUnstructuredToLinalgExt.cpp",
         "FuncConversion.cpp",
         "Passes.cpp",
         "SetStrictSymbolicShapes.cpp",
@@ -44,6 +45,7 @@ iree_compiler_cc_library(
         "@iree//compiler/src/iree/compiler/Dialect/Flow/IR",
         "@iree//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@iree//compiler/src/iree/compiler/Dialect/LinalgExt/IR",
+        "@iree//compiler/src/iree/compiler/Dialect/LinalgExt/Transforms",
         "@iree//compiler/src/iree/compiler/Dialect/Stream/IR",
         "@iree//compiler/src/iree/compiler/Dialect/Util/IR",
         "@llvm-project//llvm:Support",
