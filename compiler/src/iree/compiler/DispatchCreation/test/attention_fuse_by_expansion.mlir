@@ -583,14 +583,13 @@ util.func @scatter_collapse_original_partial(%arg0: tensor<?x1x32x8x128xf16>, %a
 //  CHECK-SAME:     %[[ARG0:[a-zA-Z0-9]+]]:
 //  CHECK-SAME:     %[[ARG1:[a-zA-Z0-9]+]]:
 //  CHECK-SAME:     %[[ARG2:[a-zA-Z0-9]+]]:
-//   CHECK-DAG:   %[[UPDATES:.+]] = tensor.expand_shape %[[ARG0]] {{.*}} tensor<?x1x32x8x128xf16> into tensor<?x1x2x16x4x2x64x2xf16>
-// TODO(IanWood1): fix this so the collapse folds with the expand
-//   CHECK-DAG:   %[[ORIGINAL:.+]] = tensor.expand_shape {{.*}} tensor<?x32x8x128xf16> into tensor<?x2x16x4x2x64x2xf16>
+//   CHECK-DAG:   %[[EXPAND:.+]] = tensor.expand_shape %[[ARG0]] {{.*}} tensor<?x1x32x8x128xf16> into tensor<?x1x2x16x4x2x64x2xf16>
+//   CHECK-DAG:   %[[COLLAPSE:.+]] = tensor.collapse_shape %[[ARG2]] {{.*}} tensor<5x?x2x16x4x2x64x2xf16> into tensor<?x2x16x4x2x64x2xf16>
 //       CHECK:   %[[SCATTER:.+]] = iree_linalg_ext.scatter
-//  CHECK-SAME:       ins(%[[UPDATES]], %[[ARG1]]
-//  CHECK-SAME:       outs(%[[ORIGINAL]]
-//       CHECK:   %[[COLLAPSE:.+]] = tensor.collapse_shape %[[SCATTER]]
-//       CHECK:   util.return %[[COLLAPSE]]
+//  CHECK-SAME:       ins(%[[EXPAND]], %[[ARG1]]
+//  CHECK-SAME:       outs(%[[COLLAPSE]]
+//       CHECK:   %[[RES_COLLAPSE:.+]] = tensor.collapse_shape %[[SCATTER]]
+//       CHECK:   util.return %[[RES_COLLAPSE]]
 
 // -----
 
