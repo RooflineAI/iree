@@ -1910,5 +1910,6 @@ const iree_hal_device_vtable_t iree_hal_vulkan_device_vtable = {
     .profiling_begin = iree_hal_vulkan_device_profiling_begin,
     .profiling_flush = iree_hal_vulkan_device_profiling_flush,
     .profiling_end = iree_hal_vulkan_device_profiling_end,
+    .info = iree_hal_vulkan_device_info,
 };
 }  // namespace

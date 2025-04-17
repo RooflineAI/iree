@@ -72,6 +72,103 @@ namespace {
 //===----------------------------------------------------------------------===//
 // Resource utilities
 //===----------------------------------------------------------------------===//
+//
+
+// Helper to check if a type is vector<4xi8>
+bool isVector4xi8(mlir::Type type) {
+    auto vecType = type.dyn_cast<mlir::VectorType>();
+    return vecType && vecType.getShape().size() == 1 &&
+           vecType.getShape()[0] == 4 && vecType.getElementType().isInteger(8);
+}
+
+// Pattern to rewrite memref.load<vector<4xi8>>
+struct ConvertI8LoadToI32LoadPattern
+    : public mlir::OpRewritePattern<mlir::memref::LoadOp> {
+    using mlir::OpRewritePattern<mlir::memref::LoadOp>::OpRewritePattern;
+
+    mlir::LogicalResult
+    matchAndRewrite(mlir::memref::LoadOp loadOp,
+                    mlir::PatternRewriter &rewriter) const override {
+
+        mlir::Value memref = loadOp.getMemRef();
+        mlir::Type loadResultType = loadOp.getResult().getType();
+        mlir::MemRefType memrefType = loadOp.getMemRefType();
+
+        // 1. Check if the load result is vector<4xi8>
+        if (!isVector4xi8(loadResultType)) {
+            return mlir::failure();
+        }
+
+        // 2. Check if the memref element type is vector<4xi8>
+        if (!isVector4xi8(memrefType.getElementType())) {
+            return mlir::failure();
+        }
+
+        // 3. Check if the memref is defined by a specific HAL op
+        // Note: Replace "hal.interface.binding.subspan" with the actual C++
+        // class name or check by op name string if the class isn't available.
+        auto *definingOp = memref.getDefiningOp();
+        if (!definingOp ||
+            definingOp->getName().getStringRef() !=
+                "hal.interface.binding.subspan") {
+            // Adjust this check if you have the HAL dialect C++ definitions
+            // e.g., if (!mlir::isa<mlir::hal::InterfaceBindingSubspanOp>(definingOp)) {
+            return mlir::failure();
+        }
+        auto subspanOp = definingOp; // Treat it as a generic Operation* for now
+
+        mlir::OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPoint(subspanOp); // Insert new subspan before the old one
+
+        // Create the new memref type: memref<?xvector<1xi32>, ...>
+        mlir::MLIRContext *ctx = rewriter.getContext();
+        mlir::Type i32Type = rewriter.getI32Type();
+        mlir::VectorType vec1xi32Type = mlir::VectorType::get({1}, i32Type);
+        mlir::MemRefType newMemRefType = mlir::MemRefType::Builder(memrefType)
+                                            .setElementType(vec1xi32Type);
+        if (!newMemRefType) {
+             llvm::errs() << "Failed to create new MemRefType\n";
+             return mlir::failure(); // Handle potential type creation errors
+        }
+
+
+        // Create the new hal.interface.binding.subspan op
+        // We need to copy attributes and operands from the original subspanOp
+        mlir::OperationState newState(subspanOp->getLoc(),
+                                     subspanOp->getName().getStringRef());
+        newState.addOperands(subspanOp->getOperands());
+        newState.addAttributes(subspanOp->getAttrs());
+        newState.addTypes(newMemRefType); // Set the new result type
+
+        mlir::Operation *newSubspanOp = rewriter.create(newState);
+        mlir::Value newMemref = newSubspanOp->getResult(0);
+
+        // Set insertion point for the new load and bitcast, right before the original load
+        rewriter.setInsertionPoint(loadOp);
+
+        // Create the new memref.load operation loading vector<1xi32>
+        auto newLoadOp = rewriter.create<mlir::memref::LoadOp>(
+            loadOp.getLoc(), newMemref, loadOp.getIndices());
+
+        // Create the vector.bitcast operation
+        auto bitcastOp = rewriter.create<mlir::vector::BitCastOp>(
+            loadOp.getLoc(), loadResultType /* target type vector<4xi8> */,
+            newLoadOp.getResult() /* source vector<1xi32> */);
+
+        // Replace uses of the original load's result with the bitcast result
+        rewriter.replaceOp(loadOp, bitcastOp);
+
+        // Replace uses of the original subspan's result with the new subspan's result
+        // This is important if the buffer is used elsewhere
+        rewriter.replaceAllUsesWith(subspanOp->getResult(0), newMemref);
+
+        // Erase the original subspan operation (it should have no uses now)
+        rewriter.eraseOp(subspanOp);
+
+        return mlir::success();
+    }
+};
+
 
 /// Resource info describing a hal.interface.binding.subspan op.
 struct SubspanResourceInfo {
@@ -398,6 +495,10 @@ struct HALInterfaceBindingSubspanConverter final
         loc, i32Ty, rewriter.getI32IntegerAttr(info.binding));
     auto ptr = rewriter.create<spirv::AccessChainOp>(loc, globalAddr, idx);
     auto addr = rewriter.create<spirv::LoadOp>(loc, ptr);
+    llvm::errs() << globalAddr << "\n";
+    llvm::errs() << idx << "\n";
+    llvm::errs() << ptr << "\n";
+    llvm::errs() << addr << "\n";
     assert(cast<spirv::PointerType>(addr.getType()).getStorageClass() ==
                spirv::StorageClass::PhysicalStorageBuffer &&
            "Expected a physical storage buffer pointer");
@@ -406,6 +507,8 @@ struct HALInterfaceBindingSubspanConverter final
     // physical storage buffer addresses.
     Value ptrInt = rewriter.create<spirv::ConvertPtrToUOp>(
         loc, rewriter.getI64Type(), addr);
+    llvm::errs() << addr << "\n";
+
     rewriter.replaceOpWithNewOp<spirv::ConvertUToPtrOp>(subspanOp,
                                                         convertedType, ptrInt);
     return success();
@@ -482,6 +585,7 @@ public:
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<spirv::SPIRVDialect>();
+    registry.insert<vector::VectorDialect>();
   }
 
   LogicalResult initializeOptions(
@@ -504,6 +608,15 @@ private:
 void ConvertToSPIRVPass::runOnOperation() {
   MLIRContext *context = &getContext();
   ModuleOp moduleOp = getOperation();
+
+  for (auto funcOp : moduleOp.getOps<mlir::FunctionOpInterface>()) {
+    RewritePatternSet hackyPatterns(context);
+    hackyPatterns.add<ConvertI8LoadToI32LoadPattern>(context);
+    if (failed(applyPatternsGreedily(funcOp, std::move(hackyPatterns)))) {
+      funcOp.emitOpError() << "failed running shape patterns";
+      return signalPassFailure();
+    }
+  }
 
   if (moduleOp.getBody()->empty())
     return;
