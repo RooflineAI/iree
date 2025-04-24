@@ -23,6 +23,8 @@ static iree_status_t iree_hal_module_buffer_view_trace_stdio(
     void* user_data, iree_string_view_t key, iree_host_size_t buffer_view_count,
     iree_hal_buffer_view_t** buffer_views, iree_allocator_t host_allocator) {
   FILE* file = (FILE*)user_data;
+  // Limit traces to the first 10 elements of each tensor.
+  const iree_host_size_t kMaxTraceElements = 10;
 
   fprintf(file, "=== %.*s ===\n", (int)key.size, key.data);
   for (iree_host_size_t i = 0; i < buffer_view_count; ++i) {
@@ -32,10 +34,11 @@ static iree_status_t iree_hal_module_buffer_view_trace_stdio(
     // We heap-alloc here because at the point this export is used performance
     // is not a concern.
 
-    // Query total length (excluding NUL terminator).
+    // Query total length (excluding NUL terminator), limited to
+    // kMaxTraceElements.
     iree_host_size_t result_length = 0;
     iree_status_t status = iree_hal_buffer_view_format(
-        buffer_view, IREE_HOST_SIZE_MAX, 0, NULL, &result_length);
+        buffer_view, kMaxTraceElements, 0, NULL, &result_length);
     if (!iree_status_is_out_of_range(status)) {
       return status;
     }
@@ -45,8 +48,9 @@ static iree_status_t iree_hal_module_buffer_view_trace_stdio(
     char* result_str = NULL;
     IREE_RETURN_IF_ERROR(iree_allocator_malloc(host_allocator, result_length,
                                                (void**)&result_str));
+    // Format into string, limited to kMaxTraceElements.
     status =
-        iree_hal_buffer_view_format(buffer_view, IREE_HOST_SIZE_MAX,
+        iree_hal_buffer_view_format(buffer_view, kMaxTraceElements,
                                     result_length, result_str, &result_length);
     if (iree_status_is_ok(status)) {
       fprintf(file, "%.*s\n", (int)result_length, result_str);

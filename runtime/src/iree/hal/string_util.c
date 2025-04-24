@@ -716,40 +716,42 @@ static iree_status_t iree_hal_format_buffer_elements_recursive(
     return iree_hal_format_buffer_elements_recursive(
         data, 1, &one, element_type, max_element_count, buffer_capacity, buffer,
         out_buffer_length);
-  } else if (shape_rank > 1) {
-    // Nested dimension; recurse into the next innermost dimension.
-    iree_hal_dim_t dim_length = 1;
-    for (iree_host_size_t i = 1; i < shape_rank; ++i) {
-      dim_length *= shape[i];
-    }
-    iree_device_size_t dim_stride =
-        dim_length * iree_hal_element_dense_byte_count(element_type);
-    if (data.data_length < dim_stride * shape[0]) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "input data underflow: data_length=%" PRIhsz " < expected=%" PRIhsz,
-          data.data_length, (iree_host_size_t)(dim_stride * shape[0]));
-    }
-    iree_const_byte_span_t subdata;
-    subdata.data = data.data;
-    subdata.data_length = dim_stride;
-    for (iree_hal_dim_t i = 0; i < shape[0]; ++i) {
-      APPEND_CHAR('[');
-      iree_host_size_t actual_length = 0;
-      iree_status_t status = iree_hal_format_buffer_elements_recursive(
-          subdata, shape_rank - 1, shape + 1, element_type, max_element_count,
-          buffer ? buffer_capacity - buffer_length : 0,
-          buffer ? buffer + buffer_length : NULL, &actual_length);
-      buffer_length += actual_length;
-      if (iree_status_is_out_of_range(status)) {
-        buffer = NULL;
-      } else if (!iree_status_is_ok(status)) {
-        return status;
-      }
-      subdata.data += dim_stride;
-      APPEND_CHAR(']');
-    }
   } else {
+    // } else if (shape_rank > 1) {
+    //   // Nested dimension; recurse into the next innermost dimension.
+    //   iree_hal_dim_t dim_length = 1;
+    //   for (iree_host_size_t i = 1; i < shape_rank; ++i) {
+    //     dim_length *= shape[i];
+    //   }
+    //   iree_device_size_t dim_stride =
+    //       dim_length * iree_hal_element_dense_byte_count(element_type);
+    //   if (data.data_length < dim_stride * shape[0]) {
+    //     return iree_make_status(
+    //         IREE_STATUS_OUT_OF_RANGE,
+    //         "input data underflow: data_length=%" PRIhsz " < expected=%"
+    //         PRIhsz, data.data_length, (iree_host_size_t)(dim_stride *
+    //         shape[0]));
+    //   }
+    //   iree_const_byte_span_t subdata;
+    //   subdata.data = data.data;
+    //   subdata.data_length = dim_stride;
+    //   for (iree_hal_dim_t i = 0; i < shape[0]; ++i) {
+    //     APPEND_CHAR('[');
+    //     iree_host_size_t actual_length = 0;
+    //     iree_status_t status = iree_hal_format_buffer_elements_recursive(
+    //         subdata, shape_rank - 1, shape + 1, element_type,
+    //         max_element_count, buffer ? buffer_capacity - buffer_length :
+    //         0, buffer ? buffer + buffer_length : NULL, &actual_length);
+    //     buffer_length += actual_length;
+    //     if (iree_status_is_out_of_range(status)) {
+    //       buffer = NULL;
+    //     } else if (!iree_status_is_ok(status)) {
+    //       return status;
+    //     }
+    //     subdata.data += dim_stride;
+    //     APPEND_CHAR(']');
+    //   }
+    // } else {
     // Leaf dimension; output data.
     iree_host_size_t max_count =
         iree_min(*max_element_count, (iree_host_size_t)shape[0]);
