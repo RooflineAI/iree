@@ -74,6 +74,11 @@ def SPIRV_WinogradVectorize
 
 def VMVX_Default : I32EnumAttrCase<"VMVXDefault", 300>;
 
+// --- Roofline Pipeline Definitions ------ //
+def Cellar_CUDA
+    : I32EnumAttrCase<"CellarCUDA", 400>;
+// ---------------------------------------- //
+
 def Linalg_TransformDialectCodegen
     : I32EnumAttrCase<"TransformDialectCodegen", 1000>;
 def Custom
@@ -99,6 +104,11 @@ def DispatchLoweringPassPipelineEnum : I32EnumAttr<
     LLVMGPU_MatmulTensorCoreMmaSync, LLVMGPU_VectorDistribute,
     LLVMGPU_PadAndVectorDistribute, LLVMGPU_WinogradVectorize,
     LLVMGPU_TileAndFuse,
+
+    // --- Roofline Pipeline Definitions ------ //
+    // Cellar CUDA CodeGen Pipelines
+    Cellar_CUDA,
+    // ---------------------------------------- //
 
     // SPIR-V CodeGen pipelines
     SPIRV_BaseLowering, SPIRV_BaseDistribute, SPIRV_BaseVectorize,
