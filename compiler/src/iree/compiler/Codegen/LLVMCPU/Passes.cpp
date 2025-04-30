@@ -847,10 +847,7 @@ void buildLLVMCPUCodegenPassPipeline(OpPassManager &variantPassManager,
     modulePassManager.addPass(createLowerExecutableUsingTransformDialectPass());
     FunctionLikeNest(modulePassManager)
         .addPass(createLLVMCPULowerExecutableTargetPass)
-        // TODO (ROO-321): Analyze the issue with bare linalg.fill operations
-        // and re-enable the verification
-        // .addPass(createVerifyWorkgroupDistributionPass)
-        ;
+        .addPass(createVerifyWorkgroupDistributionPass);
   }
 
   variantPassManager.addPass(createReconcileTranslationInfoPass());
