@@ -1883,6 +1883,7 @@ namespace {
 const iree_hal_device_vtable_t iree_hal_vulkan_device_vtable = {
     .destroy = iree_hal_vulkan_device_destroy,
     .id = iree_hal_vulkan_device_id,
+    .info = iree_hal_vulkan_device_info,
     .host_allocator = iree_hal_vulkan_device_host_allocator,
     .device_allocator = iree_hal_vulkan_device_allocator,
     .replace_device_allocator = iree_hal_vulkan_replace_device_allocator,
