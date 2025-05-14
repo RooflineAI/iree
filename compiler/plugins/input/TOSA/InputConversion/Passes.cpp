@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "compiler/plugins/input/TOSA/InputConversion/Passes.h"
+#include <optional>
 
 #include "iree/compiler/InputConversion/Common/Passes.h"
 #include "mlir/Conversion/TosaToArith/TosaToArith.h"
@@ -22,16 +23,15 @@
 namespace mlir::iree_compiler {
 
 void registerTOSAConversionPassPipeline() {
-  PassPipelineRegistration<> tosa(
+  PassPipelineRegistration<TosaConversionPassOptions> tosa(
       "iree-tosa-input-transformation-pipeline",
       "Runs the TOSA IREE flow dialect transformation pipeline",
-      [](OpPassManager &passManager) {
-        buildTOSAInputConversionPassPipeline(passManager);
-      });
+      buildTOSAInputConversionPassPipeline);
 }
 
 // Prepare TOSA for use as an input to the Flow dialect.
-void buildTOSAInputConversionPassPipeline(OpPassManager &passManager) {
+void buildTOSAInputConversionPassPipeline(
+    OpPassManager &passManager, const TosaConversionPassOptions &options) {
   passManager.addPass(mlir::createTosaToMLProgram());
   // Currently we don't handle SCF ops well and have to convert them all to CFG.
   // In the future it would be nice if we could have all of flow be both scf
@@ -52,8 +52,12 @@ void buildTOSAInputConversionPassPipeline(OpPassManager &passManager) {
 
   TosaToLinalgNamedOptions tosaToLinalgNamedOptions;
   tosaToLinalgNamedOptions.preferConv2DKernelLayoutHWCF = true;
-  tosa::TosaValidationOptions tosaValidationOptions;
-  tosaValidationOptions.profile = {"pro_int", "pro_fp"};
+  std::optional<tosa::TosaValidationOptions> tosaValidationOptions(
+      std::nullopt);
+  if (!options.disableProfileValidation) {
+    tosaValidationOptions = tosa::TosaValidationOptions();
+    tosaValidationOptions->profile = {"pro_int", "pro_fp"};
+  }
   tosa::addTosaToLinalgPasses(passManager, TosaToLinalgOptions(),
                               tosaToLinalgNamedOptions, tosaValidationOptions);
   passManager.addNestedPass<func::FuncOp>(

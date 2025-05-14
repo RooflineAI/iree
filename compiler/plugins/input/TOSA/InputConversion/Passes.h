@@ -10,6 +10,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassOptions.h"
 
 namespace mlir::iree_compiler {
 
@@ -17,8 +18,18 @@ namespace mlir::iree_compiler {
 // Pipelines
 //===----------------------------------------------------------------------===//
 
+struct TosaConversionPassOptions
+    : public PassPipelineOptions<TosaConversionPassOptions> {
+  PassOptions::Option<bool> disableProfileValidation{
+      *this, "disable-profile-validation",
+      llvm::cl::desc("Whether to disable the validation profiles for pro_int "
+                     "and pro_fp for TOSA."),
+      llvm::cl::init(false)};
+};
+
 // Performs input legalization for specific combination of input dialects.
-void buildTOSAInputConversionPassPipeline(OpPassManager &passManager);
+void buildTOSAInputConversionPassPipeline(
+    OpPassManager &passManager, const TosaConversionPassOptions &options);
 
 void registerTOSAConversionPassPipeline();
 
