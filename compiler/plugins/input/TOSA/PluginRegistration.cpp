@@ -40,7 +40,12 @@ struct TOSASession
   bool extendCustomInputConversionPassPipeline(
       OpPassManager &passManager, std::string_view typeMnemonic) override {
     if (typeMnemonic == "tosa") {
-      buildTOSAInputConversionPassPipeline(passManager);
+      // WARNING: the conversion pass now has options whether to execute the
+      // profile validation for the TOSA specification. In our use-case we
+      // do not use the plugin, but the pass pipeline itself in a custom
+      // pipeline. Therefore, we add the default options to satisfy the build.
+      TosaConversionPassOptions options;
+      buildTOSAInputConversionPassPipeline(passManager, options);
       return true;
     }
 
