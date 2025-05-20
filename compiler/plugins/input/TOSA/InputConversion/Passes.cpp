@@ -14,6 +14,7 @@
 #include "mlir/Conversion/TosaToSCF/TosaToSCF.h"
 #include "mlir/Conversion/TosaToTensor/TosaToTensor.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Tosa/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
@@ -69,6 +70,8 @@ void buildTOSAInputConversionPassPipeline(
 
   passManager.addNestedPass<func::FuncOp>(
       iree_compiler::createStripSignednessPass());
+  passManager.addNestedPass<func::FuncOp>(
+      mlir::createLinalgSpecializeGenericOpsPass());
   passManager.addNestedPass<func::FuncOp>(mlir::createCanonicalizerPass());
 
   //----------------------------------------------------------------------------
