@@ -22,6 +22,13 @@ static llvm::cl::opt<bool> clAnnotateInputAffinities(
                    "the pipeline for debugging."),
     llvm::cl::init(false));
 
+static llvm::cl::opt<bool> clElideTransferOps(
+"iree-stream-elide-transfer-ops",
+llvm::cl::desc("Elides all transfer ops that are between device links that "
+                "do not require transfers"),
+llvm::cl::init(false));
+
+
 namespace mlir::iree_compiler::IREE::Stream {
 
 using FunctionLikeNest =
@@ -180,6 +187,10 @@ void buildStreamAsyncPassPipeline(OpPassManager &passManager,
   // Everything must now be in stream.async.* form but we don't yet have
   // lifetime assigned.
   passManager.addPass(IREE::Stream::createVerifyLoweringToAsyncResourcesPass());
+
+  if (clElideTransferOps) {
+    passManager.addPass(IREE::Stream::createElideTransferOpsPass());
+  }
 
   // Materialize copy-on-write behavior with explicit stream.async.* ops.
   // This will insert a lot of copies, so follow it up with a pass that elides
