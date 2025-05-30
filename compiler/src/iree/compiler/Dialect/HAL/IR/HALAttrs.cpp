@@ -924,7 +924,8 @@ DeviceAffinityAttr::joinOR(IREE::Stream::AffinityAttr other) const {
     return nullptr; // invalid
   }
   if (otherAffinityAttr.getDevice() != getDevice()) {
-    return nullptr; // cannot join across devices (could select optimal, though)
+    SmallVector<IREE::Stream::AffinityAttr> affinities = {*this, other};
+    return IREE::HAL::DeviceOptimalAttr::get(getContext(), affinities);
   }
   return DeviceAffinityAttr::get(getContext(), getDevice(),
                                  getQueueMask() |
@@ -1047,7 +1048,8 @@ DevicePromiseAttr::joinOR(IREE::Stream::AffinityAttr other) const {
     return nullptr; // invalid
   }
   if (otherPromiseAttr.getDevice() != getDevice()) {
-    return nullptr; // cannot join across devices (could select optimal, though)
+    SmallVector<IREE::Stream::AffinityAttr> affinities = {*this, other};
+    return IREE::HAL::DeviceOptimalAttr::get(getContext(), affinities);
   }
   return DevicePromiseAttr::get(getContext(), getDevice(),
                                 getQueueMask() |
