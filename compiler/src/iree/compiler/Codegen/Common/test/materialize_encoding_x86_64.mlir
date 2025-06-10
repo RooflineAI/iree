@@ -2183,3 +2183,45 @@ func.func @unset_encoding_RES_with_layout() attributes {
 //  CHECK-SAME:     inner_tiles = [1, 16]
 //  CHECK-SAME:     tensor<1x1x1x16xf32> -> tensor<1x10xf32>
 //       CHECK:   iree_tensor_ext.dispatch.tensor.store %[[UNPACK]], %[[RESULT_BINDING]]
+
+// -----
+
+// FoldIntoPackUnpack patterns sometimes inhibit fusion, we can pass a controlFn that blocks the application of folding patterns that would
+// block fusion in subsequent passes. This test is actually target-independent.
+#encoding = #iree_encoding.layout<[#iree_cpu.cpu_encoding_layout<configuration = {encoding_info = {innerDimsPos = [2, 1], innerTileSizes = [8, 1], outerDimsPerm = [0, 2, 1]}}>]>
+#executable_target = #hal.executable.target<"llvm-cpu", "xyz", {cpu_features = "+avx512f", target_triple = "x86_64-xyz-xyz", iree.encoding.resolver = #iree_cpu.cpu_encoding_layout<>}>
+#pipeline_layout = #hal.pipeline.layout<constants = 1, bindings = [#hal.pipeline.binding<storage_buffer, "ReadOnly|Indirect">, #hal.pipeline.binding<storage_buffer, Indirect>, #hal.pipeline.binding<storage_buffer, Indirect>], flags = Indirect>
+#map = affine_map<(d0, d1, d2) -> (d0, d1, d2)>
+#map1 = affine_map<(d0, d1, d2) -> (d1, d0, d2)>
+func.func @set_encoding_transpose_multi_result() attributes {
+  hal.executable.target = #executable_target
+} {
+    %c0 = arith.constant  0 : index
+    %0 = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) alignment(64) offset(%c0) flags("ReadOnly|Indirect") : !iree_tensor_ext.dispatch.tensor<readonly:tensor<128x12x64xf32>> 
+    %1 = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) alignment(64) offset(%c0) flags(Indirect) : !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x128x64xf32>> 
+    %2 = hal.interface.binding.subspan layout(#pipeline_layout) binding(2) alignment(64) offset(%c0) flags(Indirect) : !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x128x64xf32, #encoding>>
+    %3 = iree_tensor_ext.dispatch.tensor.load %0, offsets = [0, 0, 0], sizes = [128, 12, 64], strides = [1, 1, 1] : !iree_tensor_ext.dispatch.tensor<readonly:tensor<128x12x64xf32>> -> tensor<128x12x64xf32> 
+    %4 = tensor.empty() : tensor<12x128x64xf32> 
+    %5 = linalg.generic {indexing_maps = [#map, #map1], iterator_types = ["parallel", "parallel", "parallel"]} ins(%3 : tensor<128x12x64xf32>) outs(%4 : tensor<12x128x64xf32>) {
+    ^bb0(%in: f32 , %out: f32):
+      linalg.yield %in : f32 
+    } -> tensor<12x128x64xf32> 
+    %6 = iree_encoding.set_encoding %5 : tensor<12x128x64xf32> -> tensor<12x128x64xf32, #encoding>
+    iree_tensor_ext.dispatch.tensor.store %5, %1, offsets = [0, 0, 0], sizes = [12, 128, 64], strides = [1, 1, 1] : tensor<12x128x64xf32> -> !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x128x64xf32>> 
+    iree_tensor_ext.dispatch.tensor.store %6, %2, offsets = [0, 0, 0], sizes = [12, 128, 64], strides = [1, 1, 1] : tensor<12x128x64xf32, #encoding> -> !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x128x64xf32, #encoding>>
+    return 
+}  
+
+// CHECK-LABEL: func.func @set_encoding_transpose_multi_result
+//   CHECK-DAG:   %[[INPUT_BINDING:.+]] = hal.interface.binding.subspan {{.*}} binding(0) {{.*}} : !iree_tensor_ext.dispatch.tensor<readonly:tensor<128x12x64xf32>> 
+//   CHECK-DAG:   %[[RESULT_BINDING:.+]] = hal.interface.binding.subspan {{.*}} binding(1) {{.*}} : !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x128x64xf32>> 
+//   CHECK-DAG:   %[[RESULT_BINDING1:.+]] = hal.interface.binding.subspan {{.*}} binding(2) {{.*}} : !iree_tensor_ext.dispatch.tensor<writeonly:tensor<12x8x128x8x1xf32>>
+//       CHECK:   %[[INPUT:.+]] = iree_tensor_ext.dispatch.tensor.load %[[INPUT_BINDING]]
+//       CHECK:   %[[TRANSPOSE:.+]] = linalg.generic {{.*}} ins(%[[INPUT]] : tensor<128x12x64xf32>)
+//       CHECK:   %[[PACK:.+]] = linalg.pack %[[TRANSPOSE]]
+//  CHECK-SAME:     outer_dims_perm = [0, 2, 1]
+//  CHECK-SAME:     inner_dims_pos = [2, 1]
+//  CHECK-SAME:     inner_tiles = [8, 1]
+//  CHECK-SAME:     tensor<12x128x64xf32> -> tensor<12x8x128x8x1xf32>
+//       CHECK:   iree_tensor_ext.dispatch.tensor.store %[[TRANSPOSE]], %[[RESULT_BINDING]]
+//       CHECK:   iree_tensor_ext.dispatch.tensor.store %[[PACK]], %[[RESULT_BINDING1]]
