@@ -38,7 +38,11 @@ VkSemaphore iree_hal_vulkan_native_semaphore_handle(
 iree_status_t iree_hal_vulkan_native_semaphore_multi_wait(
     iree::hal::vulkan::VkDeviceHandle* logical_device,
     const iree_hal_semaphore_list_t* semaphore_list, iree_timeout_t timeout,
-    VkSemaphoreWaitFlags wait_flags);
+    VkSemaphoreWaitFlags wait_flags, uint64_t* out_values = nullptr);
+
+iree_status_t iree_hal_vulkan_native_semaphore_multi_wait_any(
+    const iree_hal_semaphore_list_t* semaphore_list, iree_timeout_t timeout,
+    uint64_t* out_values = nullptr);
 
 #ifdef __cplusplus
 }  // extern "C"

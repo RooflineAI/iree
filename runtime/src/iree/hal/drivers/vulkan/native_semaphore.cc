@@ -203,7 +203,7 @@ static void iree_hal_vulkan_native_semaphore_fail(
 iree_status_t iree_hal_vulkan_native_semaphore_multi_wait(
     iree::hal::vulkan::VkDeviceHandle* logical_device,
     const iree_hal_semaphore_list_t* semaphore_list, iree_timeout_t timeout,
-    VkSemaphoreWaitFlags wait_flags) {
+    VkSemaphoreWaitFlags wait_flags, uint64_t* out_values) {
   if (semaphore_list->count == 0) return iree_ok_status();
 
   iree_time_t deadline_ns = iree_timeout_as_deadline_ns(timeout);
@@ -258,6 +258,9 @@ iree_status_t iree_hal_vulkan_native_semaphore_multi_wait(
     uint64_t value = 0;
     iree_status_ignore(iree_hal_vulkan_native_semaphore_query(
         semaphore_list->semaphores[i], &value));
+    if (out_values) {
+      out_values[i] = value;
+    }
   }
 
   if (result == VK_SUCCESS) {
@@ -283,6 +286,18 @@ static iree_status_t iree_hal_vulkan_native_semaphore_wait(
   };
   return iree_hal_vulkan_native_semaphore_multi_wait(
       semaphore->logical_device, &semaphore_list, timeout, 0);
+}
+
+iree_status_t iree_hal_vulkan_native_semaphore_multi_wait_any(
+    const iree_hal_semaphore_list_t* semaphore_list, iree_timeout_t timeout,
+    uint64_t* out_values) {
+  VkSemaphoreWaitFlags flags = VK_SEMAPHORE_WAIT_ANY_BIT_KHR;
+
+  if (semaphore_list->count == 0) return iree_ok_status();
+  return iree_hal_vulkan_native_semaphore_multi_wait(
+      iree_hal_vulkan_native_semaphore_cast(semaphore_list->semaphores[0])
+          ->logical_device,
+      semaphore_list, timeout, flags, out_values);
 }
 
 IREE_API_EXPORT iree_status_t iree_hal_vulkan_semaphore_handle(
