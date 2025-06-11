@@ -15,6 +15,7 @@ iree_cc_library(
     Utils
   HDRS
     "CPUUtils.h"
+    "EncodingUtils.h"
     "GPUUtils.h"
     "LinalgOpInfo.h"
     "LinkingUtils.h"
@@ -22,6 +23,7 @@ iree_cc_library(
     "Utils.h"
   SRCS
     "CPUUtils.cpp"
+    "EncodingUtils.cpp"
     "GPUUtils.cpp"
     "LinalgOpInfo.cpp"
     "LinkingUtils.cpp"
@@ -56,12 +58,15 @@ iree_cc_library(
     MLIRVectorDialect
     MLIRVectorTransforms
     MLIRViewLikeInterface
+    iree::compiler::Codegen::Dialect::CPU::IR::IREECPUDialect
     iree::compiler::Codegen::Dialect::Codegen::IR::IREECodegenDialect
+    iree::compiler::Codegen::Dialect::Codegen::Utils
     iree::compiler::Codegen::Dialect::GPU::IR::IREEGPUDialect
     iree::compiler::Codegen::Dialect::GPU::TargetUtils::KnownTargets
     iree::compiler::Codegen::Interfaces::PartitionableLoopsInterface
     iree::compiler::Codegen::Interfaces::ProcessorOpInterfaces
     iree::compiler::Codegen::Interfaces::UKernelOpInterface
+    iree::compiler::Dialect::Encoding::Utils
     iree::compiler::Dialect::HAL::IR
     iree::compiler::Dialect::LinalgExt::IR
     iree::compiler::Dialect::LinalgExt::Transforms

@@ -32,14 +32,8 @@ def BubbleUpExpandShapesPass :
   ];
   let dependentDialects = [
     "mlir::affine::AffineDialect",
-  ];
-}
-
-def CollapseReductionDimensionsPass :
-    Pass<"iree-dispatch-creation-collapse-reduction-dimensions", ""> {
-  let summary = "Collapse reduction dimensions when possible.";
-  let dependentDialects = [
     "mlir::linalg::LinalgDialect",
+    "IREE::LinalgExt::IREELinalgExtDialect",
   ];
 }
 
@@ -164,6 +158,7 @@ def SplitReductionPass :
   let summary = "Split reduction dimension to increase parallelism.";
   let dependentDialects = [
     "mlir::linalg::LinalgDialect",
+    "IREE::LinalgExt::IREELinalgExtDialect",
   ];
 }
 
@@ -189,13 +184,6 @@ def TransposeGenericOpsPass :
   let summary = "Transpose generic op loops.";
   let dependentDialects = [
     "mlir::linalg::LinalgDialect",
-  ];
-}
-
-def BubbleUpExtractSlicesPass : Pass<"iree-dispatch-creation-bubble-up-extract-slices"> {
-  let summary = "Bubble up `extract_slice` ops through Linalg-like ops";
-  let dependentDialects = [
-    "mlir::affine::AffineDialect",
   ];
 }
 

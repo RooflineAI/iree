@@ -7,26 +7,13 @@
 #ifndef IREE_COMPILER_SRC_IREE_COMPILER_CODEGEN_COMMON_ENCODINGUTILS_H_
 #define IREE_COMPILER_SRC_IREE_COMPILER_CODEGEN_COMMON_ENCODINGUTILS_H_
 
-#include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenInterfaces.h"
-#include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenTypes.h"
+#include "iree/compiler/Codegen/Dialect/Codegen/Utils/Utils.h"
 #include "iree/compiler/Dialect/Encoding/IR/EncodingOps.h"
-#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
+#include "iree/compiler/Dialect/TensorExt/IR/TensorExtTypes.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 namespace mlir::iree_compiler {
-
-using MaterializeEncodingFn =
-    std::function<FailureOr<IREE::Codegen::MaterializeEncodingInfo>(
-        RankedTensorType, IREE::HAL::ExecutableTargetAttr targetAttr)>;
-
-struct MaterializeEncodingValueInfo {
-  SmallVector<Value> innerTileSizes;
-};
-
-using MaterializeEncodingValueFn =
-    std::function<FailureOr<MaterializeEncodingValueInfo>(
-        RankedTensorType, OpBuilder &, Location)>;
 
 //===---------------------------------------------------------------------===//
 // TypeConverter
@@ -36,24 +23,44 @@ using MaterializeEncodingValueFn =
 class MaterializeEncodingTypeConverter : public TypeConverter {
 public:
   MaterializeEncodingTypeConverter(
-      IREE::Codegen::LayoutAttrInterface layoutAttr,
-      MaterializeEncodingValueFn materializeEncodingValueFn);
+      IREE::Encoding::LayoutMaterializerAttr layoutAttr);
 
-  const IREE::Codegen::LayoutAttrInterface &getLayoutAttr() const {
+  const IREE::Encoding::LayoutMaterializerAttr &getLayoutAttr() const {
     return layoutAttr;
   }
 
   IREE::Codegen::MaterializeEncodingInfo
   getEncodingInfo(RankedTensorType type) const;
 
+  /// Returns the inner tile sizes to be used for the given tensor type.
   FailureOr<SmallVector<OpFoldResult>> getInnerTileSizesOfr(
       OpBuilder &rewriter, Location loc, RankedTensorType tensorType,
       const IREE::Codegen::MaterializeEncodingInfo &materializeEncodingInfo)
       const;
 
+  /// Returns the materialized packed and swizzled shape for a
+  /// `dispatchTensorType` that binds a `RankedTensorType` with encoding. The
+  /// dynamic dimension sizes of the `dispatchTensorType` are provided in
+  /// `dynamicDims`.
+  FailureOr<SmallVector<OpFoldResult>> getPackedDimsForDispatchTensor(
+      OpBuilder &builder, Location loc,
+      IREE::TensorExt::DispatchTensorType dispatchTensorType,
+      ValueRange dynamicDims) const;
+
+  /// Returns success if materialized `newOffsets`, `newSizes` and `newStrides`
+  /// can be calculated and set for the slice specified by `offsets`, `sizes`
+  /// and `strides` on the dispatch tensor `type` with potential `dynamicDims`
+  /// sizes.
+  LogicalResult getOffsetsSizesStrides(
+      OpBuilder &builder, Location loc,
+      IREE::TensorExt::DispatchTensorType type, ValueRange dynamicDims,
+      ArrayRef<OpFoldResult> offsets, ArrayRef<OpFoldResult> sizes,
+      ArrayRef<OpFoldResult> strides, SmallVectorImpl<OpFoldResult> &newOffsets,
+      SmallVectorImpl<OpFoldResult> &newSizes,
+      SmallVectorImpl<OpFoldResult> &newStrides) const;
+
 private:
-  const IREE::Codegen::LayoutAttrInterface layoutAttr;
-  const MaterializeEncodingValueFn materializeEncodingValueFn;
+  const IREE::Encoding::LayoutMaterializerAttr layoutAttr;
 };
 
 /// Conversion target to use for for materializing the encoding.
@@ -64,12 +71,6 @@ struct MaterializeEncodingConversionTarget : public ConversionTarget {
 //===---------------------------------------------------------------------===//
 // Utility methods about Encoding.
 //===---------------------------------------------------------------------===//
-
-/// Returns the deserialized MaterializeEncodingInfo if the `layouts` field is
-/// present in encodings and it only has a single layout. Otherwise, returns
-/// std::nullopt.
-std::optional<IREE::Codegen::MaterializeEncodingInfo>
-getEncodingInfoFromLayouts(RankedTensorType type);
 
 /// Utility method to convert from `set_encoding` op to `pack` operation.
 /// NOTE: `source` could be returned when packing is not needed.
@@ -86,6 +87,10 @@ FailureOr<Value> lowerUnsetEncodingToUnpackOp(
 /// Populates the set of patterns that lowers operations with encoding types to
 /// operations without encodings.
 void populateMaterializeEncodingPatterns(
+    RewritePatternSet &patterns, MaterializeEncodingConversionTarget &target,
+    MaterializeEncodingTypeConverter &typeConverter);
+
+void populateLoadStoreMaterializeEncodingPatterns(
     RewritePatternSet &patterns, MaterializeEncodingConversionTarget &target,
     MaterializeEncodingTypeConverter &typeConverter);
 

@@ -21,7 +21,7 @@
 
 #define GET_ATTRDEF_CLASSES
 #include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenAttrs.cpp.inc"
-#include "iree/compiler/Codegen/Dialect/Codegen/IR/LoweringConfigEnums.cpp.inc"
+#include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenEnums.cpp.inc"
 
 static const char kTranslationInfoAttrName[] = "translation_info";
 static const char kCompilationInfoAttrName[] = "compilation_info";
@@ -461,21 +461,6 @@ bool WorkgroupMappingAttr::isLinearMapping() const { return false; }
 
 int64_t WorkgroupMappingAttr::getRelativeIndex() const {
   return getMappingId();
-}
-
-//===---------------------------------------------------------------------===//
-// iree_codegen.encoding_nop_layout
-//===---------------------------------------------------------------------===//
-
-MaterializeEncodingInfo
-EncodingNopLayoutAttr::getEncodingInfo(RankedTensorType type) const {
-  return MaterializeEncodingInfo{};
-}
-
-Operation *EncodingNopLayoutAttr::lowerOp(OpBuilder &b, Operation *op,
-                                          TypeRange convertedResTypes,
-                                          ValueRange convertedOperands) const {
-  return clone(b, op, convertedResTypes, convertedOperands);
 }
 
 //===---------------------------------------------------------------------===//

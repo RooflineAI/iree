@@ -15,7 +15,8 @@ namespace mlir::iree_compiler::IREE::LinalgExt {
 // Populate functions.
 //===----------------------------------------------------------------------===//
 
-/// Fold expand_shape ops with their producers (only `AttentionOp` supported)
+/// Fold expand_shape ops with their producers and collapse_shape ops with
+/// consumers.
 void populateFoldReshapeOpsByExpansionPatterns(
     RewritePatternSet &patterns,
     const linalg::ControlFusionFn &controlFoldingReshapes);
@@ -31,7 +32,10 @@ void populateBubbleTransposeFromLinalgExtOps(
     RewritePatternSet &patterns,
     const linalg::ControlFusionFn &controlFusionFn);
 
-/// Drop unit extent dims from linalg ext ops
+/// Drop unit extent dims from linalg ext ops. Uses reshapes to fold scatter
+/// and slices to fold gather operations.
+/// TODO: Respect the rank reduction strategy specified in ControlDropUnitDims
+/// options.
 void populateFoldUnitExtentDimsPatterns(
     RewritePatternSet &patterns, const linalg::ControlDropUnitDims &options);
 
@@ -117,5 +121,71 @@ splitReduction(RewriterBase &rewriter, LinalgExt::TopkOp topkOp,
 FailureOr<std::pair<Value, Value>> rewriteFft(Operation *op, Value operand,
                                               int64_t fftLength,
                                               PatternRewriter &rewriter);
+
+/// Apply transformation to split a linalg.generic argmax reduction
+/// into a two-stage reduction using an additional parallel dimension.
+/// The transformation first computes a partial argmax over tiles (parallel),
+/// then reduces those results into a final result (reduction).
+///
+/// This pattern is specialized for reductions that yield both the maximum
+/// value and its index, using the combination of `arith.maximumf`,
+/// `arith.cmpf`, and `arith.select` ops. It assumes a known structure of the
+/// region and injects index computations to track global indices.
+///
+/// The transformation proceeds in two steps:
+/// 1. Emit a strict argmax op that computes the maximum value and local index
+///    within each tile (i.e., the inner dimension after splitting the
+///    reduction).
+/// 2. Emit a final argmax-style reduction that directly computes the global
+/// index
+///    on-the-fly as `globalIndex = outer × tileSize + local`, using the
+///    original combiner structure (`maximumf`, `cmpf`, `select`).
+///
+/// Returns the resulting partial and final linalg.generic ops, or failure
+/// if the pattern does not match or cannot be split.
+///
+/// Example: original argmax op reducing over dim=512
+/// %4:2 = linalg.generic {
+///   indexing_maps = [...],
+///   iterator_types = ["parallel", "reduction"]
+/// } ins(%arg0 : tensor<?x512xbf16>)
+///   outs(%out_val, %out_idx : tensor<?xbf16>, tensor<?xi64>) {
+/// ^bb0(%in: bf16, %out: bf16, %out_0: i64):
+///   %idx = linalg.index 1 : index
+///   %cast = arith.index_cast %idx : index to i64
+///   %max = arith.maximumf %in, %out : bf16
+///   %cmp = arith.cmpf ogt, %in, %out : bf16
+///   %sel = arith.select %cmp, %cast, %out_0 : i64
+///   linalg.yield %max, %sel : bf16, i64
+/// } -> (tensor<?xbf16>, tensor<?xi64>)
+///
+/// To: splitting K=512 into 4 x 128 + final argmax over the tile dimension
+///     (dim=1 of ?x4)
+///
+/// %expanded = tensor.expand_shape %arg0 [[0], [1, 2]] : tensor<?x512xbf16>
+///     into tensor<?x4x128xbf16>
+///
+/// %init_val = linalg.fill ... : tensor<?x4xbf16>
+/// %init_idx = linalg.fill ... : tensor<?x4xi64>
+///
+/// %partial:2 = linalg.generic {
+///   indexing_maps = [...],
+///   iterator_types = ["parallel", "reduction"]
+/// } ins(%expanded)
+///   outs(%init_val, %init_idx) {
+///   // strict argmax over local tile
+/// }
+///
+/// %final:2 = linalg.generic {
+///   indexing_maps = [...],
+///   iterator_types = ["parallel", "reduction"]
+/// } ins(%partial#0, %partial#1)
+///   outs(%out_val, %out_idx) {
+///   // compute global index = outer × 128 + local inside region
+///   // then apply argmax combiner using (value, global index) pairs
+/// }
+FailureOr<linalg::SplitReductionResult>
+splitArgmaxReduction(RewriterBase &rewriter, linalg::GenericOp genericOp,
+                     linalg::ControlSplitReductionFn controlSplitReductionFn);
 
 }; // namespace mlir::iree_compiler::IREE::LinalgExt

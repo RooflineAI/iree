@@ -214,12 +214,22 @@ Value findOrCreateSubspanBuffer(RewriterBase &rewriter,
 // Misc. utility functions.
 //===---------------------------------------------------------------------===//
 
+/// Given a list of `Value`s, set the insertion point to the last (least
+/// dominant) of these values.
+Operation *setInsertionPointAfterLastValue(OpBuilder &builder,
+                                           ArrayRef<Value> values);
+
 /// Given a SubsetInsertionOpInterface, find all values that are needed to
 /// build an equivalent subset extraction, and set the insertion point to the
 /// last of these values.
 Operation *
 setInsertionPointAfterLastNeededValue(OpBuilder &builder,
                                       SubsetInsertionOpInterface subsetOp);
+
+/// Moves the op to right after its last (most dominant) operand. If the operand
+/// is a block argument, then the op is moved to the start of the block.
+void moveOpAfterLastOperand(RewriterBase &rewriter, DominanceInfo &domInfo,
+                            Operation *op);
 
 /// Check if the two tensor types (with their respective dynamic dimension
 /// values) have the same shape.
@@ -238,9 +248,6 @@ OpFoldResult convertByteOffsetToElementOffset(RewriterBase &rewriter,
 Operation *dropEncodingAndCloneOp(OpBuilder &builder, Operation *op,
                                   ValueRange convertedInputOperands,
                                   ValueRange convertedOutputOperands);
-
-/// Check if a linalg.generic is representing an argmax operation.
-LogicalResult isArgmaxOp(linalg::GenericOp genericOp);
 
 /// Replace the uses of memref value `origValue` with the given
 /// `replacementValue`. Some uses of the memref value might require changes to
@@ -314,6 +321,14 @@ inferSizesFromIR(linalg::LinalgOp linalgOp, std::optional<OpResult> opResult);
 
 /// Returns the underlying index if the given value is a constant index.
 std::optional<int64_t> getConstantIndex(Value value);
+
+/// Return true if we can prove that the we always run at least the first
+/// iteration of the ForOp.
+bool alwaysRunsFirstIteration(scf::ForOp op);
+
+/// Return true if we can prove that the we never run more than one iteration of
+/// the ForOp.
+bool neverRunsSecondIteration(scf::ForOp op);
 
 } // namespace mlir::iree_compiler
 

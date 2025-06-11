@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <iterator>
 #include <optional>
+#include <utility>
 
 #include "./local_dlpack.h"
 #include "./numpy_interop.h"
@@ -1016,10 +1017,12 @@ HalBufferView HalDevice::FromDLPackCapsule(
                                   IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
                                   iree_allocator_system(), &buffer_view);
 
-  if (!iree_status_is_ok(status)) {
-    iree_hal_buffer_release(imported_buffer);
-    CheckApiStatus(status, "Failed to create buffer view");
-  }
+  // If the buffer view was successfully created, remove our ref
+  // since the buffer view incremented it.
+  // If the buffer view failed, then remove our ref so we don't
+  // leak the buffer.
+  iree_hal_buffer_release(imported_buffer);
+  CheckApiStatus(status, "Failed to create buffer view");
 
   return HalBufferView::StealFromRawPtr(buffer_view);
 }
@@ -1148,6 +1151,7 @@ HalDevice HalDriver::CreateDefaultDevice(std::optional<py::list> allocators) {
 }
 
 HalDevice HalDriver::CreateDevice(iree_hal_device_id_t device_id,
+                                  std::optional<py::dict> params,
                                   std::optional<py::list> allocators) {
   // Since the device ids are supposed to be opaque, we need to verify
   // them by querying available devices.
@@ -1174,11 +1178,24 @@ HalDevice HalDriver::CreateDevice(iree_hal_device_id_t device_id,
     throw std::invalid_argument(std::move(msg));
   }
 
-  std::vector<iree_string_pair_t> params;
+  std::vector<std::pair<std::string, std::string>> param_strings;
+  std::vector<iree_string_pair_t> passed_params;
+  if (params.has_value()) {
+    for (auto it : params.value()) {
+      param_strings.push_back(std::make_pair(py::cast<std::string>(it.first),
+                                             py::cast<std::string>(it.second)));
+      passed_params.push_back(
+          iree_string_pair_t{{param_strings.back().first.c_str(),
+                              param_strings.back().first.size()},
+                             {param_strings.back().second.c_str(),
+                              param_strings.back().second.size()}});
+    }
+  }
+
   iree_hal_device_t* device;
   CheckApiStatus(iree_hal_driver_create_device_by_id(
-                     raw_ptr(), device_id, params.size(),
-                     (params.empty() ? nullptr : &params.front()),
+                     raw_ptr(), device_id, passed_params.size(),
+                     (passed_params.empty() ? nullptr : &passed_params.front()),
                      iree_allocator_system(), &device),
                  "Error creating default device");
   CheckApiStatus(ConfigureDevice(device, allocators),
@@ -1239,11 +1256,12 @@ VmModule CreateHalModule(
     iree_hal_module_debug_sink = (*debug_sink)->AsIreeHalModuleDebugSink();
   }
 
-  CheckApiStatus(iree_hal_module_create(instance->raw_ptr(), device_count,
-                                        devices_ptr, IREE_HAL_MODULE_FLAG_NONE,
-                                        iree_hal_module_debug_sink,
-                                        iree_allocator_system(), &module),
-                 "Error creating hal module");
+  CheckApiStatus(
+      iree_hal_module_create(
+          instance->raw_ptr(), iree_hal_module_device_policy_default(),
+          device_count, devices_ptr, IREE_HAL_MODULE_FLAG_NONE,
+          iree_hal_module_debug_sink, iree_allocator_system(), &module),
+      "Error creating hal module");
   VmModule vm_module = VmModule::StealFromRawPtr(module);
   if (debug_sink) {
     // Retain a reference. We want the callback to be valid after
@@ -1264,10 +1282,10 @@ iree_hal_module_debug_sink_t HalModuleDebugSink::AsIreeHalModuleDebugSink()
     const {
   iree_hal_module_debug_sink_t res;
   memset(&res, 0, sizeof(res));
+  res.release.fn = HalModuleDebugSink::ReleaseCallback;
+  res.release.user_data = const_cast<HalModuleDebugSink*>(this);
   res.buffer_view_trace.fn = HalModuleDebugSink::IreeHalModuleBufferViewTrace;
   res.buffer_view_trace.user_data = const_cast<HalModuleDebugSink*>(this);
-  res.destroy.fn = HalModuleDebugSink::DestroyCallback;
-  res.destroy.user_data = const_cast<HalModuleDebugSink*>(this);
   return res;
 }
 
@@ -1288,11 +1306,10 @@ static std::vector<HalBufferView> CreateHalBufferViewVector(
   return res;
 }
 
-iree_status_t HalModuleDebugSink::DestroyCallback(void* user_data) {
+void HalModuleDebugSink::ReleaseCallback(void* user_data) {
   HalModuleDebugSink* debug_sink =
       reinterpret_cast<HalModuleDebugSink*>(user_data);
   debug_sink->dec_ref();
-  return iree_ok_status();
 }
 
 iree_status_t HalModuleDebugSink::IreeHalModuleBufferViewTrace(
@@ -1491,6 +1508,7 @@ void SetupHalBindings(nanobind::module_ m) {
       .value("FLOAT_8_E4M3_FNUZ", IREE_HAL_ELEMENT_TYPE_FLOAT_8_E4M3_FNUZ)
       .value("FLOAT_8_E5M2", IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2)
       .value("FLOAT_8_E5M2_FNUZ", IREE_HAL_ELEMENT_TYPE_FLOAT_8_E5M2_FNUZ)
+      .value("FLOAT_8_E8M0_FNU", IREE_HAL_ELEMENT_TYPE_FLOAT_8_E8M0_FNU)
       .export_values()
       .def("__int__",
            [](enum iree_hal_element_types_t self) { return (uint64_t)self; });
@@ -1582,22 +1600,24 @@ void SetupHalBindings(nanobind::module_ m) {
       .def("create_default_device", &HalDriver::CreateDefaultDevice,
            py::keep_alive<0, 1>(), py::arg("allocators") = py::none())
       .def("create_device", &HalDriver::CreateDevice, py::keep_alive<0, 1>(),
-           py::arg("device_id"), py::arg("allocators") = py::none())
+           py::arg("device_id"), py::arg("params") = py::none(),
+           py::arg("allocators") = py::none())
       .def("create_device_by_uri", &HalDriver::CreateDeviceByURI,
            py::keep_alive<0, 1>(), py::arg("device_uri"),
            py::arg("allocators") = py::none())
       .def(
           "create_device",
           [](HalDriver& self, py::dict device_info,
+             std::optional<py::dict> params,
              std::optional<py::list> allocators) -> HalDevice {
             // Alias of create_device that takes a dict as returned from
             // query_available_devices for convenience.
             auto device_id =
                 py::cast<iree_hal_device_id_t>(device_info["device_id"]);
-            return self.CreateDevice(device_id, allocators);
+            return self.CreateDevice(device_id, params, allocators);
           },
           py::keep_alive<0, 1>(), py::arg("device_info"),
-          py::arg("allocators") = py::none())
+          py::arg("params") = py::none(), py::arg("allocators") = py::none())
       .def("query_available_devices", &HalDriver::QueryAvailableDevices)
       .def("dump_device_info",
            [](HalDriver& self, iree_hal_device_id_t device_id) {

@@ -228,8 +228,8 @@ func.func @static_3d_fft_stage3() {
   %c32 = arith.constant 32 : index
   %cst = arith.constant dense<[1.000000e+00, 0.707106769, 6.12323426E-17, -0.707106769]> : tensor<4xf32>
   %cst_0 = arith.constant dense<[-0.000000e+00, -0.707106769, -1.000000e+00, -0.707106769]> : tensor<4xf32>
-  %0 = bufferization.to_memref %cst_0 : tensor<4xf32> to memref<4xf32>
-  %1 = bufferization.to_memref %cst : tensor<4xf32> to memref<4xf32>
+  %0 = bufferization.to_buffer %cst_0 : tensor<4xf32> to memref<4xf32>
+  %1 = bufferization.to_buffer %cst : tensor<4xf32> to memref<4xf32>
   %2 = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64x128x32xf32>
   %3 = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) : memref<64x128x32xf32>
   iree_linalg_ext.fft {__internal_linalg_transform__ = "workgroup"} ins(%c3, %1, %0 : index, memref<4xf32>, memref<4xf32>) outs(%2, %3 : memref<64x128x32xf32>, memref<64x128x32xf32>)
@@ -700,12 +700,16 @@ func.func @i4_dequant_matvec() {
   return
 }
 
-//   CHECK-DAG: #[[$CONFIG:.+]] = #iree_codegen.lowering_config<tile_sizes = {{\[}}[1, 1], [0, 0, 32]{{\]}}>
-//   CHECK-DAG: #[[$TRANSLATION:.+]] = #iree_codegen.translation_info<pipeline = LLVMGPUWarpReduction workgroup_size = [32, 1, 1] subgroup_size = 32>
-// CHECK-LABEL: func.func @i4_dequant_matvec()
-//  CHECK-SAME:   translation_info = #[[$TRANSLATION]]
+//      CHECK: #[[$TRANSLATION:.+]] = #iree_codegen.translation_info<pipeline = LLVMGPUVectorDistribute workgroup_size = [64, 1, 1] subgroup_size = 32
+//      CHECK: func.func @i4_dequant_matvec()
+// CHECK-SAME:     translation_info = #[[$TRANSLATION]]
 //       CHECK:   linalg.generic
-//  CHECK-SAME:     lowering_config = #[[$CONFIG]]
+//       CHECK:   linalg.generic
+//  CHECK-SAME:    attrs =  {lowering_config = #iree_gpu.lowering_config<{
+//  CHECK-SAME:               partial_reduction = [0, 0, 256],
+//  CHECK-SAME:               subgroup_basis = {{\[}}[1, 1, 2], [0, 1, 2]],
+//  CHECK-SAME:               thread = [0, 0, 4], thread_basis = {{\[}}[1, 1, 32], [0, 1, 2]],
+//  CHECK-SAME:               workgroup = [1, 1, 0]
 
 // -----
 

@@ -736,8 +736,8 @@ hal.executable private @static_3d_fft_stage3 {
         %c3 = arith.constant 3 : index
         %cst = arith.constant dense<[1.000000e+00, 0.707106769, 6.12323426E-17, -0.707106769]> : tensor<4xf32>
         %cst_0 = arith.constant dense<[-0.000000e+00, -0.707106769, -1.000000e+00, -0.707106769]> : tensor<4xf32>
-        %0 = bufferization.to_memref %cst_0 : tensor<4xf32> to memref<4xf32>
-        %1 = bufferization.to_memref %cst : tensor<4xf32> to memref<4xf32>
+        %0 = bufferization.to_buffer %cst_0 : tensor<4xf32> to memref<4xf32>
+        %1 = bufferization.to_buffer %cst : tensor<4xf32> to memref<4xf32>
         %2 = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) : memref<64x128x32xf32>
         %3 = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) : memref<64x128x32xf32>
         iree_linalg_ext.fft {lowering_config = #config}
@@ -1713,9 +1713,7 @@ hal.executable private @no_compute {
         %8 = iree_tensor_ext.dispatch.workload.ordinal %3, 3 : index
         %9 = iree_tensor_ext.dispatch.workload.ordinal %4, 4 : index
         %10 = hal.interface.binding.subspan layout(#pipeline_layout) binding(0) alignment(64) offset(%c0) : memref<?x?x?xf32>{%5, %6, %7}
-        memref.assume_alignment %10, 64 : memref<?x?x?xf32>
         %11 = hal.interface.binding.subspan layout(#pipeline_layout) binding(1) alignment(64) offset(%c0) : memref<1x?x?xf32>{%8, %9}
-        memref.assume_alignment %11, 64 : memref<1x?x?xf32>
         return
       }
     }

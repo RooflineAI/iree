@@ -7,6 +7,9 @@
 // RUN: --iree-codegen-llvmgpu-use-igemm=false \
 // RUN: --pass-pipeline="builtin.module(iree-llvmgpu-select-lowering-strategy)" %s | FileCheck %s --check-prefix=LATE
 
+// RUN: iree-opt --mlir-print-local-scope --split-input-file --iree-gpu-test-target=gfx942 \
+// RUN:     --pass-pipeline="builtin.module(iree-llvmgpu-select-lowering-strategy)" %s | FileCheck %s --check-prefix=DEFAULT
+
 // TODO: This test is still using the legacy LLVMGPU kernel config. This needs
 // to be migrated to the rocdl heuristics, but for now is just physically
 // located here.
@@ -772,3 +775,37 @@ module {
 //       CHECK:   linalg.generic {{.*}}lowering_config = #iree_gpu.lowering_config
 //  CHECK-SAME:     thread = [1, 1, 8]
 //  CHECK-SAME:     workgroup = [1, 1, 512]
+
+// -----
+
+func.func @map_scatter(%arg0: tensor<100x250xi32>) -> tensor<100x250xi32> {
+  %0 = tensor.empty() : tensor<100x250xi32>
+  %1 = iree_linalg_ext.map_scatter %arg0 into %0 {
+  ^bb0(%arg1: index, %arg2: index):
+    %true = arith.constant true
+    iree_linalg_ext.yield %arg1, %arg2, %true : index, index, i1
+  } : tensor<100x250xi32> into tensor<100x250xi32> -> tensor<100x250xi32>
+  return %1 : tensor<100x250xi32>
+}
+
+// CHECK-LABEL: func.func @map_scatter
+//  CHECK-SAME:   #iree_codegen.translation_info<pipeline = LLVMGPUTileAndFuse workgroup_size = [64, 1, 1] subgroup_size = 64>
+//       CHECK:   iree_linalg_ext.map_scatter {{.*}}lowering_config = #iree_gpu.lowering_config
+//  CHECK-SAME:     thread = [1, 1]
+//  CHECK-SAME:     workgroup = [1, 64]
+
+// -----
+
+func.func @small_reduction(%arg0 : tensor<2x?xf32>, %arg1 : tensor<?xf32>, %arg2 : index) -> tensor<?xf32> {
+  %0 = linalg.generic {
+      indexing_maps = [affine_map<(d0, d1) -> (d1, d0)>, affine_map<(d0, d1) -> (d0)>],
+      iterator_types = ["parallel", "reduction"]}
+      ins(%arg0 : tensor<2x?xf32>) outs(%arg1 : tensor<?xf32>) {
+    ^bb0(%b0 : f32, %b1 : f32) :
+      %1 = arith.addf %b0, %b1 : f32
+      linalg.yield %1 : f32
+  } -> tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+// DEFAULT-LABEL: @small_reduction
+//  DEFAULT-SAME:     #iree_codegen.translation_info<pipeline = LLVMGPUTileAndFuse

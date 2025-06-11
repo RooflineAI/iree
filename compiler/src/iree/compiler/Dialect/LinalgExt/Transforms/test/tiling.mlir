@@ -1981,12 +1981,11 @@ module attributes { transform.with_named_sequence } {
 //       CHECK:   %[[EMPTY:.+]] = tensor.empty() : tensor<2x10x4096x64xf16>
 //       CHECK:   %[[RESULT:.+]] = scf.forall
 //  CHECK-SAME:       shared_outs(%[[OUTS:.+]] = %[[EMPTY]])
-//       CHECK:     %[[EMPTY_SLICE:.+]] = tensor.extract_slice %[[EMPTY]]
+//       CHECK:     %[[OUTS_SLICE:.+]] = tensor.extract_slice %[[OUTS]]
 //       CHECK:     %[[ATTENTION_SLICE:.+]] = iree_linalg_ext.attention
-//  CHECK-SAME:         outs(%[[EMPTY_SLICE]] :
+//  CHECK-SAME:         outs(%[[OUTS_SLICE]] :
 // CHECK:                ^[[BLOCK:.+]](%[[SCORE:.+]]: f32):
 // CHECK:                  iree_linalg_ext.yield %[[SCORE]] : f32
-//       CHECK:     %[[OUTS_SLICE:.+]] = tensor.extract_slice %[[OUTS]]
 //       CHECK:     %[[BIAS_SLICE:.+]] = linalg.generic
 //  CHECK-SAME:         ins(%[[ATTENTION_SLICE]],
 //  CHECK-SAME:         outs(%[[OUTS_SLICE]] :
@@ -2599,10 +2598,7 @@ func.func @gather_1d_indices(%arg0 : memref<?x?xi32>, %arg1 : memref<?xi32>, %ar
   iree_linalg_ext.gather
     dimension_map = [0]
     ins(%arg0, %arg1: memref<?x?xi32>, memref<?xi32>)
-    outs(%arg2: memref<?x?xi32>) {
-    ^bb0(%bb0: i32, %bb1: i32):
-      iree_linalg_ext.yield %bb0 : i32
-  }
+    outs(%arg2: memref<?x?xi32>)
   return
 }
 module attributes { transform.with_named_sequence } {
@@ -2642,10 +2638,7 @@ func.func @gather_2d_indices(%arg0 : memref<?x?xi32>, %arg1 : memref<?x2xi32>, %
   iree_linalg_ext.gather
     dimension_map = [0, 1]
     ins(%arg0, %arg1: memref<?x?xi32>, memref<?x2xi32>)
-    outs(%arg2: memref<?xi32>) {
-    ^bb0(%bb0: i32, %bb1: i32):
-      iree_linalg_ext.yield %bb0 : i32
-  }
+    outs(%arg2: memref<?xi32>)
   return
 }
 module attributes { transform.with_named_sequence } {

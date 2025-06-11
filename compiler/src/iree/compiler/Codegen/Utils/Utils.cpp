@@ -504,7 +504,7 @@ LogicalResult setDefaultCustomOpLoweringConfig(
   addCanonicalizationPatterns(tensor::TensorDialect::getDialectNamespace());
   memref::populateResolveRankedShapedTypeResultDimsPatterns(patterns);
   GreedyRewriteConfig config;
-  config.listener = &customOpConfigListener;
+  config.setListener(&customOpConfigListener);
   if (failed(applyPatternsGreedily(dummyFuncOp, std::move(patterns), config))) {
     return customOp.emitOpError(
         "failed to canonicalize during custom op configuration setting");
@@ -1232,8 +1232,6 @@ Value findOrCreateSubspanBuffer(
         /*cacheSwizzleStride=*/Value{}, /*boundsCheck=*/true,
         /*resetOffset=*/true);
   }
-  rewriter.create<memref::AssumeAlignmentOp>(
-      subspanOp->getLoc(), buffer, subspanOp.calculateAlignment().value());
   return buffer;
 }
 
@@ -1241,11 +1239,9 @@ Value findOrCreateSubspanBuffer(
 // Misc. utility functions
 //===---------------------------------------------------------------------===//
 
-Operation *
-setInsertionPointAfterLastNeededValue(OpBuilder &builder,
-                                      SubsetInsertionOpInterface subsetOp) {
+Operation *setInsertionPointAfterLastValue(OpBuilder &builder,
+                                           ArrayRef<Value> values) {
   DominanceInfo domInfo;
-  SmallVector<Value> values = subsetOp.getValuesNeededToBuildSubsetExtraction();
   Operation *lastOp = nullptr;
   bool setInsertionPointBefore = false;
   for (auto val : values) {
@@ -1254,7 +1250,16 @@ setInsertionPointAfterLastNeededValue(OpBuilder &builder,
       definingOp =
           &cast<BlockArgument>(val).getOwner()->getOperations().front();
     }
-    if (!definingOp || (lastOp && domInfo.dominates(definingOp, lastOp)))
+    if (!definingOp)
+      continue;
+    if (lastOp && definingOp == lastOp) {
+      // Combine 'setInsertionPointBefore' by ANDing because we only want to set
+      // the insertion point before the last op if all values this operation is
+      // derived from are block arguments.
+      setInsertionPointBefore &= isa<BlockArgument>(val);
+      continue;
+    }
+    if (lastOp && domInfo.dominates(definingOp, lastOp))
       continue;
     lastOp = definingOp;
 
@@ -1269,6 +1274,35 @@ setInsertionPointAfterLastNeededValue(OpBuilder &builder,
     builder.setInsertionPointAfter(lastOp);
   }
   return lastOp;
+}
+
+Operation *
+setInsertionPointAfterLastNeededValue(OpBuilder &builder,
+                                      SubsetInsertionOpInterface subsetOp) {
+  return setInsertionPointAfterLastValue(
+      builder, subsetOp.getValuesNeededToBuildSubsetExtraction());
+}
+
+void moveOpAfterLastOperand(RewriterBase &rewriter, DominanceInfo &domInfo,
+                            Operation *op) {
+  auto getDefiningOrContainingOp = [](Value v) -> Operation * {
+    return isa<BlockArgument>(v)
+               ? cast<BlockArgument>(v).getOwner()->getParentOp()
+               : v.getDefiningOp();
+  };
+  Value lastOperand = op->getOperand(0);
+  for (Value operand : op->getOperands()) {
+    Operation *operandDefiningOp = getDefiningOrContainingOp(operand);
+    Operation *lastValueDefiningOp = getDefiningOrContainingOp(lastOperand);
+    if (domInfo.dominates(lastValueDefiningOp, operandDefiningOp)) {
+      lastOperand = operand;
+    }
+  }
+  if (auto blockArg = dyn_cast<BlockArgument>(lastOperand)) {
+    rewriter.moveOpBefore(op, &blockArg.getOwner()->front());
+    return;
+  }
+  rewriter.moveOpAfter(op, lastOperand.getDefiningOp());
 }
 
 bool equalTensorShape(RankedTensorType tensorType, ValueRange tensorDynSizes,
@@ -1315,104 +1349,6 @@ Operation *dropEncodingAndCloneOp(OpBuilder &builder, Operation *op,
       {cast<RankedTensorType>(convertedOutputOperands[0].getType())
            .dropEncoding()},
       operands);
-}
-
-LogicalResult isArgmaxOp(linalg::GenericOp genericOp) {
-  // Check for 2 results(value, index), and 1 input
-  if (genericOp.getNumDpsInits() != 2) {
-    return failure();
-  }
-  if (genericOp.getNumDpsInputs() != 1) {
-    return failure();
-  }
-
-  // If max value is being used, it is not a pure argmax.
-  if (!genericOp.getResults()[0].use_empty()) {
-    return failure();
-  }
-
-  // Check that the rank is at least 3 and all loops are parallel
-  unsigned numLoops = genericOp.getNumLoops();
-  unsigned numParallelLoops = genericOp.getNumParallelLoops();
-
-  // Argmax will require 1D reduction.
-  if (numParallelLoops != (numLoops - 1)) {
-    return failure();
-  }
-  // TODO: Add better affine map checks.
-  auto indexing_maps = genericOp.getIndexingMapsArray();
-  if (!indexing_maps[0].isIdentity())
-    return failure();
-
-  // Check that initial value is negative Infinite.
-  // TODO: Move this check to ukernel once we implement
-  //       variant to handle non neg-Inf initial value.
-  Value initVal = genericOp.getDpsInitOperand(0)->get();
-  auto fillOp = initVal.getDefiningOp<linalg::FillOp>();
-  if (!fillOp)
-    return failure();
-  Value fillVal = fillOp.getDpsInputOperand(0)->get();
-  if (!matchPattern(fillVal, m_NegInfFloat()))
-    return failure();
-
-  // Work back from linalg.yield and check body of genericOp.
-  // The genericOp should yield the result of an arith.select,
-  // preceded by an arith.cmpf, arith.maximumf, and arith.extui
-  auto yieldOp = cast<linalg::YieldOp>(genericOp.getBody()->getTerminator());
-  Value producerOutput;
-  Operation *producer;
-
-  // Producer of linalg.yield 1st arg is arith.maximumf
-  {
-    producerOutput = yieldOp->getOperand(0);
-    producer = producerOutput.getDefiningOp();
-    if (!producer || producer->getNumOperands() == 0) {
-      return failure();
-    }
-    if (!matchPattern(producer, m_Op<arith::MaximumFOp>())) {
-      return failure();
-    }
-  }
-
-  // Producer of linalg.yield op 2nd arg is arith.select
-  // TODO: Add check that select is selecting between linalg.index and index of
-  // current max.
-  {
-    producerOutput = yieldOp->getOperand(1);
-    producer = producerOutput.getDefiningOp();
-    if (!producer || producer->getNumOperands() == 0) {
-      return failure();
-    }
-    if (!matchPattern(producer, m_Op<arith::SelectOp>())) {
-      return failure();
-    }
-  }
-
-  // Producer of arith.select op is arith.cmpf
-  {
-    producerOutput = producer->getOperand(0);
-    producer = producerOutput.getDefiningOp();
-    if (!producer || producer->getNumOperands() == 0) {
-      return failure();
-    }
-    auto producerCmpFOp = dyn_cast<arith::CmpFOp>(producer);
-    if (!producerCmpFOp) {
-      return failure();
-    }
-    if (producerCmpFOp.getPredicate() != arith::CmpFPredicate::OGT) {
-      return failure();
-    }
-
-    // Check that in and out of cmpf are loop variables.
-    // Currently first operand is disabled because it may be mixed type
-    // which would lead it to be extf(%arg0).
-    // TODO: Add better mixed type support check.
-    if (producer->getOperand(1) != genericOp.getBody()->getArgument(1)) {
-      return failure();
-    }
-  }
-
-  return success();
 }
 
 //===---------------------------------------------------------------------===//
@@ -1668,7 +1604,9 @@ bool hasFusedLeadingOp(linalg::LinalgOp rootOp) {
   SetVector<Operation *> backwardSlice;
   for (OpOperand *operand : rootOp.getDpsInputOperands()) {
     SetVector<Operation *> tmpBackwardSlice;
-    getBackwardSlice(operand->get(), &tmpBackwardSlice, options);
+    [[maybe_unused]] LogicalResult result =
+        getBackwardSlice(operand->get(), &tmpBackwardSlice, options);
+    assert(result.succeeded());
     backwardSlice.set_union(tmpBackwardSlice);
   }
 
@@ -1963,6 +1901,32 @@ std::optional<int64_t> getConstantIndex(Value value) {
     return std::nullopt;
 
   return val.getSExtValue();
+}
+
+bool alwaysRunsFirstIteration(scf::ForOp op) {
+  // Can't perform the analysis if the loops's bounds aren't index-typed.
+  if (!op.getInductionVar().getType().isIndex())
+    return false;
+  FailureOr<bool> isLb = ValueBoundsConstraintSet::compare(
+      getAsOpFoldResult(op.getLowerBound()), ValueBoundsConstraintSet::LT,
+      getAsOpFoldResult(op.getUpperBound()));
+  return isLb.value_or(false);
+}
+
+bool neverRunsSecondIteration(scf::ForOp op) {
+  // Can't perform the analysis if the loops's bounds aren't index-typed.
+  if (!op.getInductionVar().getType().isIndex())
+    return false;
+  // If the upper bound (ub) is less than or equal to the loop step, then
+  // lower bound  + step must be greater than the upper bound, assuming the
+  // lower bound is non-negative.
+  FailureOr<bool> isUbUnderStep = ValueBoundsConstraintSet::compare(
+      getAsOpFoldResult(op.getUpperBound()), ValueBoundsConstraintSet::LE,
+      getAsOpFoldResult(op.getStep()));
+  FailureOr<bool> isLbNonNegative = ValueBoundsConstraintSet::compare(
+      getAsOpFoldResult(op.getLowerBound()), ValueBoundsConstraintSet::GE,
+      getAsIndexOpFoldResult(op.getContext(), 0));
+  return isUbUnderStep.value_or(false) && isLbNonNegative.value_or(false);
 }
 
 } // namespace mlir::iree_compiler

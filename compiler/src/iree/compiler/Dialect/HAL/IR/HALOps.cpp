@@ -46,6 +46,72 @@ static constexpr uint64_t MAX_RANK_VALUE = 4096;
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// custom<DeviceQueueAffinityList>($devices, type($devices), $queue_affinities)
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseDeviceQueueAffinityList(
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &devices,
+    SmallVectorImpl<Type> &deviceTypes,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &queueAffinities) {
+  if (failed(parser.parseLSquare())) {
+    return failure();
+  }
+  do {
+    OpAsmParser::UnresolvedOperand device;
+    Type deviceType;
+    OpAsmParser::UnresolvedOperand queueAffinity;
+    Type queueAffinityType;
+    if (failed(parser.parseLParen()) || failed(parser.parseOperand(device)) ||
+        failed(parser.parseComma()) ||
+        failed(parser.parseOperand(queueAffinity)) ||
+        failed(parser.parseColon()) || failed(parser.parseType(deviceType)) ||
+        failed(parser.parseComma()) ||
+        failed(parser.parseType(queueAffinityType)) ||
+        failed(parser.parseRParen())) {
+      return failure();
+    }
+    devices.push_back(device);
+    deviceTypes.push_back(deviceType);
+    queueAffinities.push_back(queueAffinity);
+  } while (succeeded(parser.parseOptionalComma()));
+  if (failed(parser.parseRSquare())) {
+    return failure();
+  }
+  return success();
+}
+
+static void printDeviceQueueAffinityList(OpAsmPrinter &p, Operation *,
+                                         ValueRange devices,
+                                         TypeRange deviceTypes,
+                                         ValueRange queueAffinities) {
+  p << "[";
+  p.increaseIndent();
+  p.printNewline();
+  llvm::interleave(
+      llvm::zip_equal(devices, deviceTypes, queueAffinities),
+      [&](auto it) {
+        auto [device, deviceType, queueAffinity] = it;
+        p << "(";
+        p.printOperand(device);
+        p << ", ";
+        p.printOperand(queueAffinity);
+        p << " : ";
+        p.printType(deviceType);
+        p << ", ";
+        p.printType(queueAffinity.getType());
+        p << ")";
+      },
+      [&]() {
+        p << ",";
+        p.printNewline();
+      });
+  p.decreaseIndent();
+  p.printNewline();
+  p << "]";
+}
+
+//===----------------------------------------------------------------------===//
 // custom<DescriptorType>($descriptor_type)
 //===----------------------------------------------------------------------===//
 
@@ -918,6 +984,26 @@ void DeviceMemoizeOp::getSuccessorRegions(
 }
 
 //===----------------------------------------------------------------------===//
+// hal.allocator.select.attr
+//===----------------------------------------------------------------------===//
+
+void AllocatorSelectAttrOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getSelectedDevice(), "device");
+  setNameFn(getSelectedQueueAffinity(), "queue_affinity");
+}
+
+//===----------------------------------------------------------------------===//
+// hal.allocator.select
+//===----------------------------------------------------------------------===//
+
+void AllocatorSelectOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(getSelectedDevice(), "device");
+  setNameFn(getSelectedQueueAffinity(), "queue_affinity");
+}
+
+//===----------------------------------------------------------------------===//
 // hal.allocator.allocate
 //===----------------------------------------------------------------------===//
 
@@ -1005,6 +1091,7 @@ enum class NumericalType : uint32_t {
   kFloat8E4M3FN = kFloat | 0x05,
   kFloat8E5M2FNUZ = kFloat | 0x06,
   kFloat8E4M3FNUZ = kFloat | 0x07,
+  kFloat8E8M0FNU = kFloat | 0x08,
 };
 
 constexpr inline int32_t makeElementTypeValue(NumericalType numericalType,
@@ -1040,6 +1127,8 @@ std::optional<int32_t> ElementTypeOp::getTypeValue(Type type) {
       return makeElementTypeValue(NumericalType::kFloat8E5M2FNUZ, 8);
     case APFloat::S_Float8E4M3FNUZ:
       return makeElementTypeValue(NumericalType::kFloat8E4M3FNUZ, 8);
+    case APFloat::S_Float8E8M0FNU:
+      return makeElementTypeValue(NumericalType::kFloat8E8M0FNU, 8);
     case APFloat::S_IEEEhalf:
     case APFloat::S_IEEEsingle:
     case APFloat::S_IEEEdouble:
