@@ -19,7 +19,6 @@ cc_library(
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/halffloat.h",
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/ndarrayobject.h",
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/ndarraytypes.h",
-        "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_1_7_deprecated_api.h",
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_2_compat.h",
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_2_complexcompat.h",
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/npy_3kcompat.h",
