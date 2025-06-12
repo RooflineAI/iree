@@ -55,7 +55,7 @@ def iree_amdgpu_binary(
         # Header paths for builtins and our own includes.
         "-isystem $(BINDIR)/%s" % builtin_headers_path,
         "-I$(BINDIR)/runtime/src",
-        "-Iruntime/src",
+        "-I$(WORKSPACE_ROOT)/runtime/src",
 
         # Avoid warnings about things we do that are not compatible across
         # compilers but are fine because we're only ever compiling with clang.
@@ -91,6 +91,7 @@ def iree_amdgpu_binary(
             tools = [clang_tool],
             message = "Compiling %s to %s..." % (src, bitcode_out),
             output_to_bindir = 1,
+            toolchains = ["//:workspace_root"],
             **kwargs
         )
 
