@@ -13,12 +13,22 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+# Disable Cuda on mac OS
+config_setting(
+    name = "macos",
+    constraint_values = [
+        "@platforms//os:osx",
+    ],
+)
+
 string_list_flag(
     name = "enabled_drivers",
-    build_setting_default = [
+    build_setting_default = select({
+        "//conditions:default": ["cuda"],
+        ":macos": []
+    }) + [
         # ROO-487: disabled target
         # "amdgpu",
-        "cuda",
         "local-sync",
         "local-task",
         "null",
@@ -56,7 +66,10 @@ config_setting(
     name = "cuda_enabled",
     flag_values = {
         ":enabled_drivers": "cuda",
-        "@iree_cuda//:enabled": "True",
+        "@iree_cuda//:enabled": select({
+            "//conditions:default": "True",
+            ":macos": "False"
+        }),
     },
 )
 
