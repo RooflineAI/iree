@@ -9,9 +9,11 @@
 #include <cstddef>
 
 #include "iree/base/api.h"
+#include "iree/base/internal/wait_handle.h"
 #include "iree/hal/drivers/vulkan/dynamic_symbol_tables.h"
 #include "iree/hal/drivers/vulkan/dynamic_symbols.h"
 #include "iree/hal/drivers/vulkan/status_util.h"
+#include "iree/hal/drivers/vulkan/timepoint_bridge.h"
 #include "iree/hal/drivers/vulkan/util/ref_ptr.h"
 #include "iree/hal/utils/semaphore_base.h"
 
@@ -324,8 +326,138 @@ static iree_status_t iree_hal_vulkan_semaphore_export_timepoint(
     iree_hal_external_timepoint_type_t requested_type,
     iree_hal_external_timepoint_flags_t requested_flags,
     iree_hal_external_timepoint_t* IREE_RESTRICT out_external_timepoint) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "timepoint export is not yet implemented");
+  IREE_ASSERT_ARGUMENT(out_external_timepoint);
+  // TODO use all inputs
+  //  Only host-visible snapshot via wait-primitive for now.
+  if ((requested_type & IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE) == 0) {
+    iree_hal_vulkan_native_semaphore_t* semaphore =
+        iree_hal_vulkan_native_semaphore_cast(base_semaphore);
+
+    iree_hal_vulkan_timepoint_bridge_t* bridge =
+        semaphore->logical_device->timepoint_bridge;
+
+    iree_event_t* exp_event;
+    // allocate event
+    iree_status_t status = iree_allocator_malloc(
+        bridge->allocator, sizeof(*exp_event), (void**)&exp_event);
+
+    // TODO pool events
+    iree_event_initialize(false, exp_event);
+
+    // TODO shrtcut with iree_wait_primitive_immediate (req lock?) if signaled
+    // or failure
+    iree_hal_vulkan_timepoint_bridge_import(bridge, base_semaphore, value,
+                                            exp_event);
+
+    // TODO in the future: iree_event_deinitialize(exp_event);
+    // who deinitializes it? the caller?
+    // when is it removed?
+
+    iree_wait_primitive_t wp =
+        iree_make_wait_primitive(exp_event->type, exp_event->value);
+
+    // type-erase into external timepoint
+    *out_external_timepoint = (iree_hal_external_timepoint_t){
+        .type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE,
+        .flags = requested_flags,
+        .compatibility = IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+                         IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+        .handle = {.wait_primitive = wp}};
+
+    return iree_ok_status();
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "VULKAN only supports the export of WAIT_PRIMITIVE timepoints");
+  }
+
+  //   IREE_ASSERT_ARGUMENT(out_external_timepoint);
+  //   memset(out_external_timepoint, 0x00, sizeof(*out_external_timepoint));
+  //   // if ((requested_type &
+  //   IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_VULKAN_TIMEPOINT)
+  //   ==
+  //   //     0) {  // TODO iree_all_bits_set is in runtime
+  //   //   return iree_make_status(
+  //   //       IREE_STATUS_INVALID_ARGUMENT,
+  //   //       "VULKAN only supports the export of DEVICE_WAIT timepoints");
+  //   // }
+
+  //   // iree_hal_vulkan_native_semaphore_t* semaphore =
+  //   //     iree_hal_vulkan_native_semaphore_cast(base_semaphore);
+
+  //   // IREE_TRACE_ZONE_BEGIN(z0);
+  //   // // TODO fast-path: if the semaphore is already satisfied?
+
+  //   // // type-erase into external timepoint
+  //   // *out_external_timepoint = (iree_hal_external_timepoint_t){
+  //   //     .type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_VULKAN_TIMEPOINT,
+  //   //     .flags = requested_flags,
+  //   //     .handle = {.vulkan_semaphore = semaphore},
+  //   //     .compatibility = IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+  //   //                      IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT};
+
+  //   // // NOTE: does __not__ transfer ownership; the caller must ensure the
+  //   // // semaphore lives until it has waited/imported the time-point.
+  //   // return iree_ok_status();
+
+  //   // Only host-visible snapshot via wait-primitive for now.
+  //   if ((requested_type & IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE) ==
+  //   0) {
+  //     return iree_make_status(
+  //         IREE_STATUS_INVALID_ARGUMENT,
+  //         "VULKAN only supports the export of WAIT_PRIMITIVE timepoints");
+  //   }
+  //   // // Make sure the semaphore **will** reach |value|: fast-poll first,
+  //   then
+  //   // // block (host wait) so vkGetSemaphoreFdKHR never hands out a fd that
+  //   will
+  //   // // never signal.
+  //   // IREE_RETURN_IF_ERROR(
+  //   //     iree_hal_semaphore_wait(base_semaphore, value,
+  //   //     iree_infinite_timeout()));
+
+  //   // Vulkan → POSIX fd
+
+  //   iree_hal_vulkan_native_semaphore_t* sem =
+  //       iree_hal_vulkan_native_semaphore_cast(base_semaphore);
+  //   // needs to be locked?
+  //   iree_slim_mutex_lock(&sem->base.timepoint_mutex);
+
+  //   VkSemaphoreGetFdInfoKHR get_fd_info = {
+  //       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR,
+  //       .pNext = NULL,
+  //       .semaphore = sem->handle,
+  //       .handleType =
+  //           VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT,  //
+  //           IREE_HAVE_WAIT_TYPE_EVENTFD,
+  //                                                             //
+  //                                                             IREE_WAIT_PRIMITIVE_TYPE_SYNC_FILE,
+  //                                                             //
+  //                                                             IREE_VULKAN_TIMELINE_HANDLE_TYPE,
+  //   };
+  //   int fd = -1;
+  //   IREE_RETURN_IF_ERROR(
+  //       VK_RESULT_TO_STATUS(sem->logical_device->syms()->vkGetSemaphoreFdKHR(
+  //                               *sem->logical_device, &get_fd_info, &fd),
+  //                           "vkGetSemaphoreFdKHR"));
+
+  //   // Wrap fd in an IREE wait-primitive so higher layers can poll/wait.
+  //   iree_wait_primitive_t wp = iree_make_wait_primitive(
+  //       IREE_HAVE_WAIT_TYPE_EVENTFD, iree_wait_primitive_value_t{.event =
+  //       fd});
+
+  //   // type-erase into external timepoint
+  //   *out_external_timepoint = (iree_hal_external_timepoint_t){
+  //       .type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE,
+  //       .flags = requested_flags,
+  //       .compatibility = IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT |
+  //                        IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT,
+  //       .handle = {.wait_primitive = wp}};
+
+  //   // iree_hal_semaphore_retain(base_semaphore); ??
+  //   iree_slim_mutex_unlock(&sem->base.timepoint_mutex);
+
+  //   return iree_ok_status();
 }
 
 namespace {

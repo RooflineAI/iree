@@ -125,9 +125,10 @@ iree_status_t iree_hal_semaphore_wait_source_ctl(
         *out_wait_status_code = iree_status_code(status);
         iree_status_ignore(status);
       } else {
-        *out_wait_status_code = current_value < target_value
-                                    ? IREE_STATUS_DEFERRED
-                                    : IREE_STATUS_OK;
+        *out_wait_status_code =
+            (true || (current_value < target_value))  // TODO fix
+                ? IREE_STATUS_DEFERRED
+                : IREE_STATUS_OK;
       }
       return iree_ok_status();
     }

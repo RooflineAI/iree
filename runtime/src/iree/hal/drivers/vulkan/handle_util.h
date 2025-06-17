@@ -24,6 +24,7 @@
 #include "iree/hal/drivers/vulkan/dynamic_symbols.h"
 #include "iree/hal/drivers/vulkan/extensibility_util.h"
 #include "iree/hal/drivers/vulkan/status_util.h"
+#include "iree/hal/drivers/vulkan/timepoint_bridge.h"
 #include "iree/hal/drivers/vulkan/util/ref_ptr.h"
 
 namespace iree {
@@ -110,6 +111,9 @@ class VkDeviceHandle : public RefObject<VkDeviceHandle> {
   bool owns_device_;
   const VkAllocationCallbacks* allocator_ = nullptr;
   iree_allocator_t host_allocator_;
+
+ public:
+  iree_hal_vulkan_timepoint_bridge_t* timepoint_bridge = nullptr;
 };
 
 class VkCommandPoolHandle {
