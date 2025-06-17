@@ -221,6 +221,13 @@ typedef struct iree_hal_task_semaphore_wait_cmd_t {
   iree_hal_task_timepoint_t timepoint;
 } iree_hal_task_semaphore_wait_cmd_t;
 
+typedef struct iree_hal_task_external_timepoint_wait_cmd_t {
+  iree_task_wait_t task;
+  iree_hal_semaphore_t* semaphore;
+  uint64_t value;
+  iree_hal_external_timepoint_t timepoint;
+} iree_hal_task_external_timepoint_wait_cmd_t;
+
 // Cleans up a wait task by returning the event used to the pool and - if the
 // task failed - ensuring we scrub it from the timepoint list.
 static void iree_hal_task_semaphore_wait_cmd_cleanup(
@@ -237,43 +244,82 @@ static void iree_hal_task_semaphore_wait_cmd_cleanup(
   iree_hal_semaphore_release((iree_hal_semaphore_t*)cmd->semaphore);
 }
 
+static void iree_hal_task_external_timepoint_wait_cmd_cleanup(
+    iree_task_t* task, iree_status_code_t status_code) {
+  iree_hal_task_external_timepoint_wait_cmd_t* cmd =
+      (iree_hal_task_external_timepoint_wait_cmd_t*)task;
+  if (IREE_UNLIKELY(status_code != IREE_STATUS_OK)) {
+    // Abort the timepoint. Note that this is not designed to be fast as
+    // semaphore failure is an exceptional case.
+    // TODO: What to do here??
+  }
+  // Release the semaphore
+  iree_hal_semaphore_release(cmd->semaphore);
+}
+
 iree_status_t iree_hal_task_semaphore_enqueue_timepoint(
     iree_hal_semaphore_t* base_semaphore, uint64_t minimum_value,
     iree_task_t* issue_task, iree_arena_allocator_t* arena,
     iree_task_submission_t* submission) {
-  iree_hal_task_semaphore_t* semaphore =
-      iree_hal_task_semaphore_cast(base_semaphore);
-
-  iree_slim_mutex_lock(&semaphore->mutex);
-
   iree_status_t status = iree_ok_status();
-  if (semaphore->current_value >= minimum_value) {
-    // Fast path: already satisfied.
-  } else if (!iree_status_is_ok(semaphore->failure_status)) {
-    // Semaphore failed; can't enqueue timepoints (they'll reject immediately).
-    status = iree_status_clone(semaphore->failure_status);
+  if (iree_hal_task_semaphore_isa(base_semaphore)) {
+    iree_hal_task_semaphore_t* semaphore =
+        iree_hal_task_semaphore_cast(base_semaphore);
+
+    iree_slim_mutex_lock(&semaphore->mutex);
+    if (semaphore->current_value >= minimum_value) {
+      // Fast path: already satisfied.
+    } else if (!iree_status_is_ok(semaphore->failure_status)) {
+      // Semaphore failed; can't enqueue timepoints (they'll reject
+      // immediately).
+      status = iree_status_clone(semaphore->failure_status);
+    } else {
+      // Slow path: acquire a system wait handle and perform a full wait.
+      iree_hal_task_semaphore_wait_cmd_t* cmd = NULL;
+      status = iree_arena_allocate(arena, sizeof(*cmd), (void**)&cmd);
+      if (iree_status_is_ok(status)) {
+        status = iree_hal_task_semaphore_acquire_timepoint(
+            semaphore, minimum_value, iree_infinite_timeout(), &cmd->timepoint);
+      }
+      if (iree_status_is_ok(status)) {
+        iree_task_wait_initialize(issue_task->scope,
+                                  iree_event_await(&cmd->timepoint.event),
+                                  IREE_TIME_INFINITE_FUTURE, &cmd->task);
+        iree_task_set_cleanup_fn(&cmd->task.header,
+                                 iree_hal_task_semaphore_wait_cmd_cleanup);
+        iree_task_set_completion_task(&cmd->task.header, issue_task);
+        cmd->semaphore = semaphore;
+        iree_hal_semaphore_retain(base_semaphore);
+        iree_task_submission_enqueue(submission, &cmd->task.header);
+      }
+    }
+    iree_slim_mutex_unlock(&semaphore->mutex);
   } else {
-    // Slow path: acquire a system wait handle and perform a full wait.
-    iree_hal_task_semaphore_wait_cmd_t* cmd = NULL;
+    iree_hal_task_external_timepoint_wait_cmd_t* cmd = NULL;
     status = iree_arena_allocate(arena, sizeof(*cmd), (void**)&cmd);
     if (iree_status_is_ok(status)) {
-      status = iree_hal_task_semaphore_acquire_timepoint(
-          semaphore, minimum_value, iree_infinite_timeout(), &cmd->timepoint);
+      status = iree_hal_semaphore_export_timepoint(
+          base_semaphore, minimum_value, IREE_HAL_QUEUE_AFFINITY_ANY,
+          IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE,
+          IREE_HAL_EXTERNAL_TIMEPOINT_FLAG_NONE, &cmd->timepoint);
     }
     if (iree_status_is_ok(status)) {
-      iree_task_wait_initialize(issue_task->scope,
-                                iree_event_await(&cmd->timepoint.event),
-                                IREE_TIME_INFINITE_FUTURE, &cmd->task);
-      iree_task_set_cleanup_fn(&cmd->task.header,
-                               iree_hal_task_semaphore_wait_cmd_cleanup);
-      iree_task_set_completion_task(&cmd->task.header, issue_task);
-      cmd->semaphore = semaphore;
+      cmd->semaphore = base_semaphore;
       iree_hal_semaphore_retain(base_semaphore);
+      cmd->value = minimum_value;
+
+      // Convert wait primitive to wait source
+      iree_wait_source_t wait_source;
+      iree_wait_source_import(cmd->timepoint.handle.wait_primitive,
+                              &wait_source);
+      iree_task_wait_initialize(issue_task->scope, wait_source,
+                                IREE_TIME_INFINITE_FUTURE, &cmd->task);
+      iree_task_set_cleanup_fn(
+          &cmd->task.header, iree_hal_task_external_timepoint_wait_cmd_cleanup);
+      iree_task_set_completion_task(&cmd->task.header, issue_task);
       iree_task_submission_enqueue(submission, &cmd->task.header);
     }
   }
-
-  iree_slim_mutex_unlock(&semaphore->mutex);
   return status;
 }
 
