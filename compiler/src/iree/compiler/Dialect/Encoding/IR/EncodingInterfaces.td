@@ -14,8 +14,8 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 // Attribute Interfaces
 //===----------------------------------------------------------------------===//
 
-def IREEEncoding_EncodingLayoutResolverAttrInterface :
-  AttrInterface<"EncodingLayoutResolverAttrInterface"> {
+def IREEEncoding_LayoutResolverAttr :
+  AttrInterface<"LayoutResolverAttr"> {
   let cppNamespace = "::mlir::iree_compiler::IREE::Encoding";
   let description = [{
     Interface used to query layout information needed to materialize encoding
@@ -55,7 +55,7 @@ def IREEEncoding_EncodingLayoutResolverAttrInterface :
       /*desc=*/[{
         Returns the an attribute implementing the  which is either common format
         or wrapped by an attribute that implements the
-        `SerializableEncodingAttrInterface` interface.
+        `SerializableAttr` interface.
         If it is in common format (e.g., a regular tensor type), we can easily
         calculate the storage size. Otherwise, we will need a hook from
         external, and the hook can come from an attribute that implements the
@@ -76,8 +76,8 @@ def IREEEncoding_EncodingLayoutResolverAttrInterface :
   ];
 }
 
-def IREEEncoding_SerializableEncodingAttrInterface :
-  AttrInterface<"SerializableEncodingAttrInterface"> {
+def IREEEncoding_SerializableAttr :
+  AttrInterface<"SerializableAttr"> {
   let cppNamespace = "::mlir::iree_compiler::IREE::Encoding";
   let description = [{
     Interface for encoding attributes that can be attached on a tensor type. An
@@ -95,7 +95,6 @@ def IREEEncoding_SerializableEncodingAttrInterface :
     - `isSerialized`: checks if the encoding is serialized or not.
     - `cloneWithLayouts`: creates a serializable encoding with the layouts
       information.
-    - `convertType`: converts a type to materialized form.
     - The rest of methods that interpret the encodings. E.g.,
       `calculateStorageSizeInBytes` is the method to parse layouts and produce
       the storage size in bytes.
@@ -162,12 +161,12 @@ def IREEEncoding_SerializableEncodingAttrInterface :
       /*retTy=*/"bool",
       /*methodName=*/"isCompatibleWith",
       /*args=*/(ins
-        "IREE::Encoding::SerializableEncodingAttrInterface":$other
+        "IREE::Encoding::SerializableAttr":$other
       ),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         auto attr =
-          llvm::dyn_cast_or_null<SerializableEncodingAttrInterface>($_attr);
+          llvm::dyn_cast_or_null<SerializableAttr>($_attr);
         if (!attr) {
           return false;
         }
@@ -197,7 +196,31 @@ def IREEEncoding_SerializableEncodingAttrInterface :
         assert(false && "unimplemented interface method");
         return {};
       }]
-    >,
+    >
+  ];
+
+  let extraClassDeclaration = [{
+    /// Returns true if they are the same attribute. Otherwise, returns true if
+    /// both attributes implement SerializableAttr interface
+    /// and they are compatible with each other.
+    static bool areCompatible(Attribute lhs, Attribute rhs);
+  }];
+}
+
+def IREEEncoding_LayoutMaterializerAttr :
+  AttrInterface<"LayoutMaterializerAttr"> {
+  let cppNamespace = "::mlir::iree_compiler::IREE::Encoding";
+  let description = [{
+    An interface that collects a set of methods for encoding materialization.
+
+    These are the core methods:
+    - `convertType`: converts a type to its materialized form.
+    - `getOffsetsSizesStrides`: to retrieve the materialized new
+      offsets, sizes and strides for load/store type operations.
+    - `lowerOp`: converts an operation to its materialized form.
+  }];
+
+  let methods = [
     InterfaceMethod<
       /*desc=*/[{
         Returns the materialized form for the provided type.
@@ -213,14 +236,50 @@ def IREEEncoding_SerializableEncodingAttrInterface :
         return type;
       }]
     >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Returns success if materialized `newOffsets`, `newSizes` and
+        `newStrides` can be calculated and set for the slice specified by
+        `offsets`, `sizes` and `strides` on the dispatch tensor `type` with
+        potential `dynamicDims` sizes.
+      }],
+      /*retTy=*/"::mlir::LogicalResult",
+      /*methodName=*/"getOffsetsSizesStrides",
+      /*args=*/(ins
+        "::mlir::OpBuilder &":$builder,
+        "::mlir::Location":$loc,
+        "IREE::TensorExt::DispatchTensorType":$type,
+        "::mlir::ValueRange":$dynamicDims,
+        "ArrayRef<OpFoldResult>":$offsets,
+        "ArrayRef<OpFoldResult>":$sizes,
+        "ArrayRef<OpFoldResult>":$strides,
+        "::llvm::SmallVectorImpl<OpFoldResult> &":$newOffsets,
+        "::llvm::SmallVectorImpl<OpFoldResult> &":$newSizes,
+        "::llvm::SmallVectorImpl<OpFoldResult> &":$newStrides
+      ),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(false && "unimplemented interface method");
+        return failure();
+      }]
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Returns the materialized form for the provided operation.
+      }],
+      /*retTy=*/"::mlir::Operation *",
+      /*methodName=*/"lowerOp",
+      /*args=*/(ins "::mlir::OpBuilder &":$b,
+                    "::mlir::Operation *":$op,
+                    "::mlir::TypeRange":$convertedResTypes,
+                    "::mlir::ValueRange":$convertedOperands),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        assert(false && "unimplemented interface method");
+        return nullptr;
+      }]
+    >
   ];
-
-  let extraClassDeclaration = [{
-    /// Returns true if they are the same attribute. Otherwise, returns true if
-    /// both attributes implement SerializableEncodingAttrInterface interface
-    /// and they are compatible with each other.
-    static bool areCompatible(Attribute lhs, Attribute rhs);
-  }];
 }
 
 def IREEEncoding_ContractionEncodingAttrInterface :

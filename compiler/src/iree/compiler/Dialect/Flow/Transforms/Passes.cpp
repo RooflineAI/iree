@@ -83,7 +83,7 @@ static void addCleanupPatterns(OpPassManager &passManager) {
       // Simplify integer arithmetic.
       .addPass(IREE::Util::createOptimizeIntArithmeticPass)
       // Standard MLIR cleanup.
-      .addPass(IREE::Flow::createCanonicalizerPass)
+      .addPass(IREE::Flow::createCanonicalizePass)
       .addPass(mlir::createCSEPass)
 
       // Simplify util.global accesses; this can help with data flow tracking as
@@ -119,7 +119,7 @@ void buildFlowTransformPassPipeline(OpPassManager &passManager,
             InitializeEmptyTensorsPassOptions{clZeroFillEmptyTensors});
       })
       .addPass(IREE::Flow::createCaptureDynamicDimsPass)
-      .addPass(IREE::Flow::createCanonicalizerPass)
+      .addPass(IREE::Flow::createCanonicalizePass)
       .addPass(mlir::createCSEPass);
 
   // Module pass to outline dispatch regions (and similar ops) into their own
@@ -155,7 +155,7 @@ void buildFlowTransformPassPipeline(OpPassManager &passManager,
       IREE::Util::createStripDebugOpsPass());
 
   // Cleanup identity ops that clutter up the IR and canonicalize.
-  FunctionLikeNest(passManager).addPass(IREE::Flow::createCanonicalizerPass);
+  FunctionLikeNest(passManager).addPass(IREE::Flow::createCanonicalizePass);
 
   // Deduplicate executables created from dispatch regions.
   // Note: this only deduplicates equivalent executables. We could in addition
@@ -225,7 +225,7 @@ void buildFlowTransformPassPipeline(OpPassManager &passManager,
     // breaks the pipeline string generation for reproducers.
     // So we add these passes directly to the top-level manager.
     passManager.addNestedPass<IREE::Flow::ExecutableOp>(
-        IREE::Flow::createCanonicalizerPass());
+        IREE::Flow::createCanonicalizePass());
     passManager.addNestedPass<IREE::Flow::ExecutableOp>(mlir::createCSEPass());
   }
 

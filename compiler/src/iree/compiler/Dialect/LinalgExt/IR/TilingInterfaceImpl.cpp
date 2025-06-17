@@ -392,7 +392,6 @@ GatherOp::generateResultTileValue(OpBuilder &builder, unsigned resultNumber,
 LogicalResult GatherOp::generateScalarImplementation(OpBuilder &b, Location loc,
                                                      ValueRange ivs) {
   auto indexDepth = getIndexDepth();
-  Value result = b.create<memref::LoadOp>(loc, getOutput(), ivs);
   SmallVector<Value> loadIndices(ivs.take_front(getBatchRank()));
 
   // Populate with empty values.
@@ -423,19 +422,9 @@ LogicalResult GatherOp::generateScalarImplementation(OpBuilder &b, Location loc,
 
   Value init = b.create<memref::LoadOp>(loc, getSource(), starts);
 
-  IRMapping bvm;
-  Block &block = getRegion().front();
-  bvm.map(block.getArgument(0), init);
-  bvm.map(block.getArgument(1), result);
-  for (auto &blockOp : block.without_terminator()) {
-    b.clone(blockOp, bvm);
-  }
-
   // The last op is linalg_ext.yield op. Store the operand to
   // destination.
-  b.create<memref::StoreOp>(
-      loc, bvm.lookupOrDefault(block.getTerminator()->getOperand(0)),
-      getOutput(), ivs);
+  b.create<memref::StoreOp>(loc, init, getOutput(), ivs);
   return success();
 }
 
@@ -2525,7 +2514,7 @@ OnlineAttentionOp::generateInitialTensorForPartialReduction(
 
   SmallVector<OpFoldResult> tiledShape;
   for (auto [tileSize, dimSize] : llvm::zip_equal(sizes, shape)) {
-    if (isZeroIndex(tileSize)) {
+    if (isZeroInteger(tileSize)) {
       tiledShape.push_back(dimSize);
     } else {
       tiledShape.push_back(tileSize);
@@ -2925,7 +2914,7 @@ computeCustomOpAllSliceParameters(OpBuilder &builder, Location loc,
                                   SmallVector<OpFoldResult> tileSizes) {
   assert(ivs.size() == static_cast<size_t>(llvm::count_if(
                            llvm::make_range(tileSizes.begin(), tileSizes.end()),
-                           [](OpFoldResult v) { return !isZeroIndex(v); })) &&
+                           [](OpFoldResult v) { return !isZeroInteger(v); })) &&
          "expected as many ivs as non-zero sizes");
   unsigned numDims = customOp.getNumLoops();
   unsigned numSymbols = customOp.getNumNonLoopDimensions();

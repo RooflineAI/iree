@@ -106,6 +106,12 @@ typedef struct iree_hal_hip_device_params_t {
   // Only command buffers produced by the compiler that have the
   // IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION bit set will use this.
   bool allow_inline_execution;
+
+  // Enable async caching on the device.
+  bool async_caching;
+
+  // External stream to use for the device.
+  uint64_t external_stream;
 } iree_hal_hip_device_params_t;
 
 // Initializes |out_params| to default values.

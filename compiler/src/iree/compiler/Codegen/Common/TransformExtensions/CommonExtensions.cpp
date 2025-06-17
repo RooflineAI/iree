@@ -878,11 +878,11 @@ static IREEOneShotBufferizationOptions getBufferizationOptions() {
   // options.testAnalysisOnly = testAnalysisOnly;
   // options.printConflicts = printConflicts;
 
-  // bufferization.to_memref is used to bufferize constants in IREE. IREE has
+  // bufferization.to_buffer is used to bufferize constants in IREE. IREE has
   // it's own logic to handle constants. We'd like to leave the arith.constant
-  // as is and insert bufferization.to_memref to convert the tensor to memref.
+  // as is and insert bufferization.to_buffer to convert the tensor to memref.
   options.opFilter.denyOperation<arith::ConstantOp>();
-  options.opFilter.denyOperation<bufferization::ToMemrefOp>();
+  options.opFilter.denyOperation<bufferization::ToBufferOp>();
 
   // This type converter converts tensor types to memref types when no exact
   // memref type can be inferred from the context.
@@ -940,7 +940,7 @@ DiagnosedSilenceableFailure transform_dialect::IREEBufferizeOp::apply(
     RewritePatternSet patterns(getContext());
     patterns.add<EmptyTensorLoweringPattern>(patterns.getContext());
     GreedyRewriteConfig config;
-    config.listener = &listener;
+    config.setListener(&listener);
     // Manually gather list of ops because the other GreedyPatternRewriteDriver
     // overloads only accepts ops that are isolated from above.
     LogicalResult result =
@@ -968,7 +968,8 @@ DiagnosedSilenceableFailure transform_dialect::IREEBufferizeOp::apply(
       return addressSpaceAttr;
     };
   }
-  if (failed(runIREEOneShotBufferize(target, options))) {
+  bufferization::BufferizationState bufferizationState;
+  if (failed(runIREEOneShotBufferize(target, options, bufferizationState))) {
     return mlir::emitDefiniteFailure(target, "bufferization failed");
   }
 
@@ -1256,6 +1257,7 @@ DiagnosedSilenceableFailure transform_dialect::FuseConsumerOp::apply(
 void transform_dialect::FuseConsumerOp::getEffects(
     SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
   transform::consumesHandle(getTargetMutable(), effects);
+  transform::consumesHandle(getLoopsMutable(), effects);
   transform::producesHandle(getOperation()->getOpResults(), effects);
   transform::modifiesPayload(effects);
 }

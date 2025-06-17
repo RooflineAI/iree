@@ -5,9 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/compiler/Codegen/Common/EncodingUtils.h"
-#include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenTypes.h"
 #include "iree/compiler/Codegen/Dialect/Codegen/Utils/Utils.h"
 #include "iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUAttrs.h"
+#include "iree/compiler/Codegen/Utils/EncodingUtils.h"
+#include "iree/compiler/Codegen/Utils/Utils.h"
 #include "iree/compiler/Dialect/Encoding/IR/EncodingTypes.h"
 #include "iree/compiler/Dialect/TensorExt/IR/TensorExtTypes.h"
 #include "llvm/Support/Debug.h"
@@ -18,65 +19,26 @@
 #include <optional>
 
 #define DEBUG_TYPE "iree-codegen-encoding-utils"
-#define DBGS() (llvm::dbgs() << "[" DEBUG_TYPE "]: ")
-#define LDBG(X) LLVM_DEBUG(DBGS() << X << "\n")
 
 namespace mlir::iree_compiler {
 
 using IREE::Codegen::MaterializeEncodingInfo;
-using IREE::Encoding::EncodingAttr;
-using IREE::Encoding::getEncodingAttr;
-using IREE::Encoding::getEncodingContractionDims;
 using IREE::Encoding::PadEncodingLayoutAttr;
-using IREE::Encoding::SerializableEncodingAttrInterface;
-
-// Returns the layout as a SerializableEncodingAttrInterface, or nullptr if this
-// is not the only layout or if there's no encoding at all.
-static SerializableEncodingAttrInterface
-getSerializableEncodingAttr(IREE::Codegen::LayoutAttrInterface layoutAttr,
-                            RankedTensorType type) {
-  if (!type.getEncoding()) {
-    return nullptr;
-  }
-  auto encoding = dyn_cast<IREE::Encoding::LayoutAttr>(type.getEncoding());
-  if (encoding) {
-    ArrayAttr layouts = encoding.getLayouts();
-    if (layouts.size() != 1) {
-      return nullptr;
-    }
-    return dyn_cast<SerializableEncodingAttrInterface>(*layouts.begin());
-  }
-  auto encodingResolver =
-      dyn_cast<IREE::Encoding::EncodingLayoutResolverAttrInterface>(layoutAttr);
-  if (!encodingResolver) {
-    return nullptr;
-  }
-  Attribute resolvedEncoding = encodingResolver.getLayout(type);
-  LDBG("Unresolved type: " << type);
-  LDBG("layoutAttr: " << layoutAttr);
-  LDBG("Resolved into: " << resolvedEncoding);
-  return dyn_cast<SerializableEncodingAttrInterface>(resolvedEncoding);
-}
 
 MaterializeEncodingTypeConverter::MaterializeEncodingTypeConverter(
-    IREE::Codegen::LayoutAttrInterface layoutAttr,
-    MaterializeEncodingValueFn materializeEncodingValueFn)
-    : layoutAttr(layoutAttr),
-      materializeEncodingValueFn(materializeEncodingValueFn) {
+    IREE::Encoding::LayoutMaterializerAttr layoutAttr)
+    : layoutAttr(layoutAttr) {
   addConversion([](IntegerType intType) { return intType; });
   addConversion([](IndexType indexType) { return indexType; });
   addConversion([](FloatType floatType) { return floatType; });
   addConversion([](MemRefType memrefType) { return memrefType; });
   addConversion([=](RankedTensorType type) {
-    SerializableEncodingAttrInterface serializableEncodingAttr =
-        getSerializableEncodingAttr(getLayoutAttr(), type);
     // TODO(jornt): The isa<IREE::Encoding::PadEncodingLayoutAttr> check is
     // needed because PadEncodingLayoutAttr is a serializable attribute, but it
     // relies on its own type conversion for now. Once PadEncodingLayoutAttr
     // implements `convertType`, this can be removed.
-    if (serializableEncodingAttr &&
-        !isa<IREE::Encoding::PadEncodingLayoutAttr>(serializableEncodingAttr)) {
-      return cast<RankedTensorType>(serializableEncodingAttr.convertType(type));
+    if (!isa<IREE::Encoding::PadEncodingLayoutAttr>(getLayoutAttr())) {
+      return cast<RankedTensorType>(getLayoutAttr().convertType(type));
     }
     return type.dropEncoding();
   });
@@ -86,16 +48,13 @@ MaterializeEncodingTypeConverter::MaterializeEncodingTypeConverter(
     if (!boundType || !boundType.getEncoding()) {
       return dispatchTensorType;
     }
-    SerializableEncodingAttrInterface serializableEncodingAttr =
-        getSerializableEncodingAttr(getLayoutAttr(), boundType);
     // TODO(jornt): The isa<IREE::Encoding::PadEncodingLayoutAttr> check is
     // needed because PadEncodingLayoutAttr is a serializable attribute, but it
     // relies on its own type conversion for now. Once PadEncodingLayoutAttr
     // implements `convertType`, this can be removed.
-    if (serializableEncodingAttr &&
-        !isa<IREE::Encoding::PadEncodingLayoutAttr>(serializableEncodingAttr)) {
+    if (!isa<IREE::Encoding::PadEncodingLayoutAttr>(getLayoutAttr())) {
       return cast<IREE::TensorExt::DispatchTensorType>(
-          serializableEncodingAttr.convertType(dispatchTensorType));
+          getLayoutAttr().convertType(dispatchTensorType));
     }
     Type convertedBoundType = convertType(boundType);
     return IREE::TensorExt::DispatchTensorType::get(
@@ -129,13 +88,7 @@ MaterializeEncodingConversionTarget::MaterializeEncodingConversionTarget(
 
 IREE::Codegen::MaterializeEncodingInfo
 MaterializeEncodingTypeConverter::getEncodingInfo(RankedTensorType type) const {
-  // If the layout is present in the encoding, use it directly. It means that
-  // the layout is already resolved and some information could be dropped during
-  // the lowering. Thus, we prioritize the resolved layout.
-  if (auto maybeEncodingInfo = getEncodingInfoFromLayouts(type)) {
-    return maybeEncodingInfo.value();
-  }
-  return layoutAttr.getEncodingInfo(type);
+  return getEncodingInfoFromLayout(type, layoutAttr);
 }
 
 FailureOr<SmallVector<OpFoldResult>>
@@ -143,50 +96,52 @@ MaterializeEncodingTypeConverter::getInnerTileSizesOfr(
     OpBuilder &rewriter, Location loc, RankedTensorType tensorType,
     const IREE::Codegen::MaterializeEncodingInfo &materializeEncodingInfo)
     const {
-  ArrayRef<int64_t> staticTileSizes = materializeEncodingInfo.innerTileSizes;
-  if (!ShapedType::isDynamicShape(staticTileSizes)) {
-    return getAsOpFoldResult(rewriter.getI64ArrayAttr(staticTileSizes));
-  }
-  assert(materializeEncodingValueFn &&
-         "When dynamic tile sizes are generated, a MaterializeEncodingValueFn "
-         "should be provided.");
-
-  FailureOr<MaterializeEncodingValueInfo> materializeEncodingValueInfo =
-      materializeEncodingValueFn(tensorType, rewriter, loc);
-  if (failed(materializeEncodingValueInfo)) {
-    return failure();
-  }
-  ArrayRef<Value> innerTileSizeValues =
-      materializeEncodingValueInfo->innerTileSizes;
-
-  SmallVector<OpFoldResult> result(staticTileSizes.size());
-  for (size_t i = 0; i < result.size(); ++i) {
-    if (ShapedType::isDynamic(staticTileSizes[i])) {
-      result[i] = innerTileSizeValues[i];
-    } else if (tensorType.isDynamicDim(i)) {
-      result[i] =
-          rewriter.create<arith::ConstantIndexOp>(loc, staticTileSizes[i])
-              .getResult();
-    } else {
-      result[i] = rewriter.getI64IntegerAttr(staticTileSizes[i]);
-    }
-  }
-  return result;
+  return getInnerTileSizesOfrImpl(rewriter, loc, tensorType, layoutAttr,
+                                  materializeEncodingInfo);
 }
 
-std::optional<IREE::Codegen::MaterializeEncodingInfo>
-getEncodingInfoFromLayouts(RankedTensorType type) {
-  auto layoutAttr =
-      dyn_cast_or_null<IREE::Encoding::LayoutAttr>(type.getEncoding());
-  if (!layoutAttr) {
-    return std::nullopt;
+FailureOr<SmallVector<OpFoldResult>>
+MaterializeEncodingTypeConverter::getPackedDimsForDispatchTensor(
+    OpBuilder &builder, Location loc,
+    IREE::TensorExt::DispatchTensorType dispatchTensorType,
+    ValueRange dynamicDims) const {
+
+  auto boundTensorType =
+      llvm::dyn_cast<RankedTensorType>(dispatchTensorType.getBoundType());
+  if (!boundTensorType) {
+    return failure();
   }
-  ArrayRef<Attribute> layouts = layoutAttr.getLayouts().getValue();
-  assert(layouts.size() == 1 && "only single layout is supported");
-  if (auto layout = dyn_cast<IREE::Codegen::LayoutAttrInterface>(layouts[0])) {
-    return layout.getEncodingInfo(type);
+  MaterializeEncodingInfo encodingInfo =
+      getEncodingInfoFromLayout(boundTensorType, layoutAttr);
+  return getPackedDimsForDispatchTensorImpl(
+      builder, loc, dispatchTensorType, dynamicDims, layoutAttr, encodingInfo);
+}
+
+LogicalResult MaterializeEncodingTypeConverter::getOffsetsSizesStrides(
+    OpBuilder &builder, Location loc, IREE::TensorExt::DispatchTensorType type,
+    ValueRange dynamicDims, ArrayRef<OpFoldResult> offsets,
+    ArrayRef<OpFoldResult> sizes, ArrayRef<OpFoldResult> strides,
+    SmallVectorImpl<OpFoldResult> &newOffsets,
+    SmallVectorImpl<OpFoldResult> &newSizes,
+    SmallVectorImpl<OpFoldResult> &newStrides) const {
+  auto boundType = dyn_cast<RankedTensorType>(type.getBoundType());
+  if (!boundType || !boundType.getEncoding()) {
+    return failure();
   }
-  return std::nullopt;
+  // TODO(jornt): The isa<IREE::GPU::GPUPadLayoutAttr> check is
+  // needed because PadEncodingLayoutAttr is a serializable attribute, but it
+  // relies on its own type conversion for now. Once GPUPadLayoutAttr
+  // implements `getOffsetsSizesStrides`, this can be removed.
+  if (!isa<IREE::GPU::GPUPadLayoutAttr>(getLayoutAttr())) {
+    return getLayoutAttr().getOffsetsSizesStrides(
+        builder, loc, type, dynamicDims, offsets, sizes, strides, newOffsets,
+        newSizes, newStrides);
+  }
+  auto boundTensorType = cast<RankedTensorType>(type.getBoundType());
+  newSizes = getMixedValues(boundTensorType.getShape(), dynamicDims, builder);
+  newOffsets.resize(newSizes.size(), builder.getIndexAttr(0));
+  newStrides.resize(newSizes.size(), builder.getIndexAttr(1));
+  return success();
 }
 
 } // namespace mlir::iree_compiler

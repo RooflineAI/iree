@@ -64,6 +64,9 @@ inline void registerMlirPasses() {
   // Arm SME
   arm_sme::registerArmSMEPasses();
 
+  // GPU
+  registerGPUPasses();
+
   // Linalg
   registerLinalgPasses();
 

@@ -174,7 +174,7 @@ static bool isRootOp(Operation *op) {
     return !isa<linalg::FillOp>(op);
   }
   if (isa<TilingInterface>(op)) {
-    return !isa<tensor::PadOp, linalg::PackOp>(op);
+    return !isa<IREE::LinalgExt::GatherOp, tensor::PadOp, linalg::PackOp>(op);
   }
   return isa<linalg::UnPackOp>(op);
 }
@@ -1057,8 +1057,7 @@ void FormDispatchRegionsPass::runOnOperation() {
   memref::populateResolveRankedShapedTypeResultDimsPatterns(patterns);
   IREE::Flow::DispatchRegionOp::getCanonicalizationPatterns(patterns, context);
   GreedyRewriteConfig config;
-  config.maxIterations = GreedyRewriteConfig::kNoLimit;
-  config.fold = true;
+  config.setMaxIterations(GreedyRewriteConfig::kNoLimit).enableFolding(true);
   if (failed(applyPatternsGreedily(funcOp, std::move(patterns), config))) {
     funcOp.emitOpError("failed in cleanup patterns");
     return signalPassFailure();

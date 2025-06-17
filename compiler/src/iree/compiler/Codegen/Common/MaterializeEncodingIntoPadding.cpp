@@ -55,8 +55,7 @@ static PadEncodingLayoutAttr getPadLayout(Attribute layoutAttr,
     return dyn_cast<PadEncodingLayoutAttr>(*layouts.begin());
   }
   Attribute resolvedEncoding =
-      cast<IREE::Encoding::EncodingLayoutResolverAttrInterface>(layoutAttr)
-          .getLayout(type);
+      cast<IREE::Encoding::LayoutResolverAttr>(layoutAttr).getLayout(type);
   LLVM_DEBUG({
     llvm::dbgs() << "Unresolved type: " << type << "\n";
     llvm::dbgs() << "layoutAttr: " << layoutAttr << "\n";
@@ -88,10 +87,8 @@ static RankedTensorType getPaddedType(Attribute layoutAttr,
 struct MaterializePadEncodingTypeConverter final
     : MaterializeEncodingTypeConverter {
   MaterializePadEncodingTypeConverter(
-      IREE::Codegen::LayoutAttrInterface layoutAttr,
-      MaterializeEncodingValueFn materializeEncodingValueFn)
-      : MaterializeEncodingTypeConverter(layoutAttr,
-                                         materializeEncodingValueFn) {
+      IREE::Encoding::LayoutMaterializerAttr layoutAttr)
+      : MaterializeEncodingTypeConverter(layoutAttr) {
     addConversion([](RankedTensorType type) -> std::optional<RankedTensorType> {
       // The type converter is designed for `pad_encoding_layout` encoding
       // attribute. By the definition, the final converted type is the same
@@ -209,7 +206,7 @@ struct MaterializeFlowDispatchTensorStoreOp final
     RankedTensorType paddedType = newTargetType.asRankedTensorType();
 
     Location loc = storeOp.getLoc();
-    SmallVector<Value> dynamicResultSizes{storeOp->getOperands()};
+    SmallVector<Value> dynamicResultSizes{adaptor.getOperands()};
     Value empty =
         rewriter.create<tensor::EmptyOp>(loc, paddedType, dynamicResultSizes);
 
@@ -279,12 +276,6 @@ struct MaterializeEncodingIntoPaddingPass final
     MLIRContext *context = &getContext();
     FunctionOpInterface operation = getOperation();
 
-    auto materializeEncodingValueFn =
-        [](RankedTensorType, OpBuilder &,
-           Location) -> FailureOr<MaterializeEncodingValueInfo> {
-      return failure();
-    };
-
     // Retrieve the config from executable target attribute, if any. Otherwise,
     // retrieve the config from CLI GPU target and construct a virtual
     // configuration.
@@ -306,23 +297,21 @@ struct MaterializeEncodingIntoPaddingPass final
     // access the target info during materialization.
     //
     // Otherwise, fall back to the nop layout.
-    IREE::Codegen::LayoutAttrInterface layoutAttr;
+    IREE::Encoding::LayoutMaterializerAttr layoutAttr;
     if (targetConfig &&
         targetConfig.contains(IREE::Encoding::kEncodingResolverAttrName)) {
-      layoutAttr = targetConfig.getAs<IREE::Codegen::LayoutAttrInterface>(
+      layoutAttr = targetConfig.getAs<IREE::Encoding::LayoutMaterializerAttr>(
           IREE::Encoding::kEncodingResolverAttrName);
-      auto resolverAttr =
-          cast<IREE::Encoding::EncodingLayoutResolverAttrInterface>(layoutAttr);
-      layoutAttr = cast<IREE::Codegen::LayoutAttrInterface>(
+      auto resolverAttr = cast<IREE::Encoding::LayoutResolverAttr>(layoutAttr);
+      layoutAttr = cast<IREE::Encoding::LayoutMaterializerAttr>(
           resolverAttr.cloneWithSimplifiedConfig(targetConfig));
     } else {
-      layoutAttr = cast<IREE::Codegen::LayoutAttrInterface>(
+      layoutAttr = cast<IREE::Encoding::LayoutMaterializerAttr>(
           IREE::Codegen::EncodingNopLayoutAttr::get(context));
     }
 
     RewritePatternSet materializeEncodingPattern(context);
-    MaterializePadEncodingTypeConverter typeConverter(
-        layoutAttr, materializeEncodingValueFn);
+    MaterializePadEncodingTypeConverter typeConverter(layoutAttr);
     MaterializeEncodingConversionTarget target(*context);
     populateMaterializeEncodingPatterns(materializeEncodingPattern, target,
                                         typeConverter);
