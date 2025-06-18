@@ -19,6 +19,7 @@ iree_cc_library(
     "CompilerDriver.cpp"
     "Diagnostics.cpp"
   DEPS
+    LLVMPasses
     LLVMSupport
     LLVMTargetParser
     MLIRBuiltinToLLVMIRTranslation

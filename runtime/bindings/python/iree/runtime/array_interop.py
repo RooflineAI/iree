@@ -89,9 +89,7 @@ class DeviceArray(numpy.lib.mixins.NDArrayOperatorsMixin):
     # https://numpy.org/doc/2.2/reference/generated/numpy.lib.mixins.NDArrayOperatorsMixin.html
     def __array_ufunc__(self, ufunc: np.ufunc, method, *inputs, **kwargs):
         host_array = self.to_host()
-        return host_array.__array_ufunc__(
-            ufunc, method, inputs, kwargs
-        )
+        return host_array.__array_ufunc__(ufunc, method, inputs, kwargs)
 
     def __array_function__(self, func, types, args, kwargs):
         if func in _DEVICE_HANDLED_FUNCTIONS:

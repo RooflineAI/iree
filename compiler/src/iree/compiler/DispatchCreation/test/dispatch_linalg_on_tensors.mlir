@@ -1052,8 +1052,8 @@ util.func public @inline_cst(%arg0 : tensor<4x32xi32>) -> tensor<32xi32> {
   %empty = tensor.empty() : tensor<32xi32>
   %0 = linalg.generic {
       indexing_maps = [
-        affine_map<(d0, d1) -> (d0, d1)>, 
-        affine_map<(d0, d1) -> (d1)>, 
+        affine_map<(d0, d1) -> (d0, d1)>,
+        affine_map<(d0, d1) -> (d1)>,
         affine_map<(d0, d1) -> (d1)>
       ],
       iterator_types = ["reduction", "parallel"]}
@@ -1098,7 +1098,7 @@ util.func public @inline_cst2(%arg0 : tensor<4x2xi32>) -> tensor<2xi32> {
   %empty = tensor.empty() : tensor<2xi32>
   %0 = linalg.generic {
       indexing_maps = [
-        affine_map<(d0, d1) -> (d0, d1)>, 
+        affine_map<(d0, d1) -> (d0, d1)>,
         affine_map<(d0, d1) -> (d1)>,
         affine_map<(d0, d1) -> (d1)>
       ],

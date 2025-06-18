@@ -51,10 +51,9 @@ cc_test(
         "//lib:libIREECompiler.so",
     ],
     tags = ["skip-bazel_to_cmake"],
+    toolchains = ["//:workspace_root"],
     deps = [
         ":headers",
         ":loader",
     ],
-    toolchains = ["//:workspace_root"],
 )
-

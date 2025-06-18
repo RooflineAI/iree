@@ -137,7 +137,8 @@ struct TargetRegistryRef {
                    .getRegisteredTargetBackends();
   }
   bool isGlobal() const {
-    return value == &mlir::iree_compiler::IREE::HAL::TargetRegistry::getGlobal();
+    return value ==
+           &mlir::iree_compiler::IREE::HAL::TargetRegistry::getGlobal();
   }
   const mlir::iree_compiler::IREE::HAL::TargetRegistry *operator->() const {
     return value;

@@ -91,9 +91,9 @@ maybe(
 maybe(
     http_archive,
     name = "robin_map",
-    strip_prefix = "robin-map-1.3.0",
-    sha256 = "a8424ad3b0affd4c57ed26f0f3d8a29604f0e1f2ef2089f497f614b1c94c7236",
     build_file = "@llvm-raw//utils/bazel/third_party_build:robin_map.BUILD",
+    sha256 = "a8424ad3b0affd4c57ed26f0f3d8a29604f0e1f2ef2089f497f614b1c94c7236",
+    strip_prefix = "robin-map-1.3.0",
     url = "https://github.com/Tessil/robin-map/archive/refs/tags/v1.3.0.tar.gz",
 )
 
@@ -127,7 +127,7 @@ load("@rules_python//python:pip.bzl", "pip_parse")
 
 pip_parse(
     name = "pypi",
-    requirements_lock = "//runtime:requirements.txt"
+    requirements_lock = "//runtime:requirements.txt",
 )
 
 load("@pypi//:requirements.bzl", "install_deps")
@@ -146,4 +146,3 @@ install_deps()
 # )
 # """,
 # )
-

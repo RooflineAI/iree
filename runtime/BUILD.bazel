@@ -14,8 +14,8 @@ package(
 )
 
 exports_files(["lit.cfg.py"])
-exports_files(glob(["bindings/python/iree/**/*"]))
 
+exports_files(glob(["bindings/python/iree/**/*"]))
 
 py_library(
     name = "runtime_python",

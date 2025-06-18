@@ -28,7 +28,6 @@ iree_cc_library(
   DEPS
     LLVMSupport
     MLIRArithDialect
-    MLIRDialectUtils
     MLIRIR
     MLIRLinalgDialect
     MLIRTensorDialect

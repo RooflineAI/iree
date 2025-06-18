@@ -3,6 +3,7 @@ py_library(
     srcs = glob(["iree/**/*.py"]),
     visibility = ["//visibility:public"],
 )
+
 cc_library(
     name = "numpy_headers",
     hdrs = [
@@ -36,18 +37,24 @@ cc_library(
         "@pypi_numpy//:site-packages/numpy/_core/include/numpy/utils.h",
     ],
 )
+
 # These flags are needed for pybind11 to work.
 PYBIND11_COPTS = [
     "-fexceptions",
     "-frtti",
 ]
+
 PYBIND11_FEATURES = [
     # Cannot use header_modules (parse_headers feature fails).
     "-use_header_modules",
 ]
+
 cc_library(
     name = "bindings_python",
-    srcs = glob(["**/*.cc"], exclude=["initialize_model.cc"]),
+    srcs = glob(
+        ["**/*.cc"],
+        exclude = ["initialize_model.cc"],
+    ),
     hdrs = glob(["**/*.h"]),
     copts = ["-Iexternal/pypi_numpy/site-packages/numpy/_core/include"],
     includes = ["."],
@@ -77,16 +84,16 @@ cc_library(
 )
 
 cc_binary(
-    name="_runtime.so",
+    name = "_runtime.so",
     srcs = ["initialize_module.cc"],
     copts = PYBIND11_COPTS,
     features = PYBIND11_FEATURES,
     includes = ["runtime/bindings/python"],
     linkshared = 1,
     linkstatic = 0,
+    visibility = ["//visibility:public"],
     deps = [
         ":bindings_python",
-        "@nanobind"
+        "@nanobind",
     ],
-    visibility = ["//visibility:public"],
 )

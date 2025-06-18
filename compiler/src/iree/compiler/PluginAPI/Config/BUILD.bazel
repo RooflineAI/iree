@@ -40,12 +40,11 @@ genrule(
         "HANDLE_PLUGIN_ID(input_stablehlo)\n" +
         "HANDLE_PLUGIN_ID(input_torch)\n" +
         select({
-            "//conditions:default":
-                "HANDLE_PLUGIN_ID(hal_target_cellar_cuda)\n" +
-                "HANDLE_PLUGIN_ID(hal_target_cuda)\n" +
-                # FIXME for some reason ROCM errors on macOs
-                "HANDLE_PLUGIN_ID(hal_target_rocm)\n",
-            ":macos": ""
+            "//conditions:default": "HANDLE_PLUGIN_ID(hal_target_cellar_cuda)\n" +
+                                    "HANDLE_PLUGIN_ID(hal_target_cuda)\n" +
+                                    # FIXME for some reason ROCM errors on macOs
+                                    "HANDLE_PLUGIN_ID(hal_target_rocm)\n",
+            ":macos": "",
         }) +
         # Samples
         "HANDLE_PLUGIN_ID(example)\n" +
@@ -67,7 +66,7 @@ iree_compiler_cc_library(
         # For now, we just hard include all in-tree plugins.
         "@patio//roofexplorer:registration",
         "@patio//roofqx:registration",
-        "@patio//target/CellarCPU:CellarCPU",
+        "@patio//target/CellarCPU",
         "//compiler/plugins/target/LLVMCPU",
         "//compiler/plugins/target/Local",
         "//compiler/plugins/target/MetalSPIRV",
@@ -80,11 +79,11 @@ iree_compiler_cc_library(
         "//samples/compiler_plugins/simple_io_sample:registration",
     ] + select({
         "//conditions:default": [
-            "@patio//target/CellarCUDA:CellarCUDA",
+            "@patio//target/CellarCUDA",
             "//compiler/plugins/target/CUDA",
             # FIXME for some reason ROCM errors on macOs
             "//compiler/plugins/target/ROCM",
         ],
-        ":macos": []
+        ":macos": [],
     }),
 )

@@ -12,7 +12,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-
 workspace_root(name = "workspace_root")
 
 exports_files(["third_party/nvidia_sdk_download/fetch_cuda_toolkit.py"])

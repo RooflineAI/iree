@@ -41,7 +41,7 @@ def iree_flatbuffer_c_library(
         tools = [flatcc],
         cmd = "$(location %s) %s %s" % (flatcc, " ".join(flags), " ".join(["$(location {})".format(src) for src in srcs])),
         testonly = testonly,
-        toolchains = ["//:workspace_root"]
+        toolchains = ["//:workspace_root"],
     )
     native.cc_library(
         name = name,

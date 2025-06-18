@@ -39,15 +39,16 @@ bool_flag(
 )""")
             print("CUDA auto configuration downloading is only supported on x86_64 Linux and Windows, but the current platform is: " + repository_ctx.os.name + " " + repository_ctx.os.arch)
             return
+
         # Link and run the download script.
         script_path = repository_ctx.path(script_file)
         repository_ctx.symlink(script_path, "download.py")
         output_dir = repository_ctx.path("cuda_root")
 
-        result = repository_ctx.execute(["python3", "download.py", output_dir], timeout=40)
+        result = repository_ctx.execute(["python3", "download.py", output_dir], timeout = 40)
         if result.return_code != 0:
             fail("download.py execution failed:\n" + result.stderr)
-        
+
         cuda_toolkit_root = "cuda_root/12.2.1/linux-x86_64"
     else:
         # Probe environment for CUDA toolkit location.
@@ -86,9 +87,9 @@ cuda_auto_configure = repository_rule(
     implementation = cuda_auto_configure_impl,
     attrs = {
         "iree_repo_alias": attr.string(default = "@iree_core"),
-        "script": attr.label(allow_files = True, default=None),
+        "script": attr.label(allow_files = True, default = None),
     },
-    local = True
+    local = True,
 )
 
 def configure_iree_cuda_deps(iree_repo_alias = None, script = ""):
