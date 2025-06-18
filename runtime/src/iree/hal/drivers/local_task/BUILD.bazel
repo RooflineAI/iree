@@ -8,6 +8,7 @@
 # These are generally just wrappers around host heap memory and host threads.
 
 load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+load("//runtime/src/iree/hal/cts:cts_test_suite.bzl", "iree_hal_cts_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -54,4 +55,19 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/utils:semaphore_base",
         "//runtime/src/iree/task",
     ],
+)
+
+# IREE local-task HAL Conformance Test Suite
+iree_hal_cts_test_suite(
+    name = "local_task_cts",
+    compiler_target_backend = "llvm-cpu",  # As per prompt/assumption
+    driver_name = "local-task",
+    driver_registration_fn = "iree_hal_local_task_driver_module_register",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/local_task/registration/driver_module.h",
+    executable_format = "vmvx-bytecode-fb",  # As per prompt/assumption
+    labels = [
+        "cts",
+        "driver=local-task",
+    ],
+    deps = ["//runtime/src/iree/hal/drivers/local_task/registration"],
 )

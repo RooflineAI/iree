@@ -1,0 +1,11 @@
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files([
+    "command_buffer_dispatch_constants_test.mlir",
+    "command_buffer_dispatch_test.mlir",
+    "executable_cache_test.mlir",
+])

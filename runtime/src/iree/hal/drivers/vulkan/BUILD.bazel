@@ -7,6 +7,7 @@
 # HAL implementation using Vulkan and (likely) SPIR-V executables.
 
 load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
+load("//runtime/src/iree/hal/cts:cts_test_suite.bzl", "iree_hal_cts_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -120,4 +121,19 @@ iree_runtime_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+# IREE Vulkan HAL Conformance Test Suite
+iree_hal_cts_test_suite(
+    name = "vulkan_cts",
+    compiler_target_backend = "vulkan-spirv",
+    driver_name = "vulkan",
+    driver_registration_fn = "iree_hal_vulkan_driver_module_register",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/vulkan/registration/driver_module.h",
+    executable_format = "vulkan-spirv-fb",
+    labels = [
+        "cts",
+        "driver=vulkan",
+    ],
+    deps = ["//runtime/src/iree/hal/drivers/vulkan/registration"],  # Depends on the :registration target
 )

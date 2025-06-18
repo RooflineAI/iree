@@ -1,0 +1,230 @@
+# Copyright 2021 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Base libraries for all CTS tests.
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+exports_files([
+    "cts_test_template.cc.in",
+    "empty_executables.h",  # Also export this as it's used by the macro
+])
+
+py_library(
+    name = "process_cts_template",
+    srcs = ["process_cts_template.py"],
+)
+
+cc_library(
+    name = "cts_test_base",
+    testonly = True,
+    hdrs = ["cts_test_base.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+    # No visibility needed as it's used only within this package by generated tests
+    # and by the _test_library rules below.
+    # visibility = ["//visibility:public"], # Original was public
+)
+
+# Individual test libraries (headers for test sources)
+# These are depended upon by the generated cc_test rules from the macro.
+
+cc_library(
+    name = "allocator_test_library",
+    testonly = True,
+    hdrs = ["allocator_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "buffer_mapping_test_library",
+    testonly = True,
+    hdrs = ["buffer_mapping_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_copy_buffer_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_copy_buffer_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_dispatch_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_dispatch_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_dispatch_constants_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_dispatch_constants_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_fill_buffer_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_fill_buffer_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "command_buffer_update_buffer_test_library",
+    testonly = True,
+    hdrs = ["command_buffer_update_buffer_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "driver_test_library",
+    testonly = True,
+    hdrs = ["driver_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "event_test_library",
+    testonly = True,
+    hdrs = ["event_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "executable_cache_test_library",
+    testonly = True,
+    hdrs = ["executable_cache_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "file_test_library",
+    testonly = True,
+    hdrs = ["file_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "semaphore_test_library",
+    testonly = True,
+    hdrs = ["semaphore_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "semaphore_submission_test_library",
+    testonly = True,
+    hdrs = ["semaphore_submission_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "@iree//runtime/src/iree/testing:gtest",
+        "@iree//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+# The actual CTS tests are now generated by driver-specific BUILD files
+# (e.g., //runtime/src/iree/hal/drivers/vulkan/BUILD.bazel)
+# by calling iree_hal_cts_test_suite.

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+load("//runtime/src/iree/hal/cts:cts_test_suite.bzl", "iree_hal_cts_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -40,4 +41,21 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/utils:files",
         "//runtime/src/iree/hal/utils:semaphore_base",
     ],
+)
+
+# IREE local-sync HAL Conformance Test Suite
+iree_hal_cts_test_suite(
+    name = "local_sync_cts",
+    compiler_target_backend = "llvm-cpu",  # As per prompt/assumption
+    driver_name = "local-sync",
+    driver_registration_fn = "iree_hal_local_sync_driver_module_register",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/local_sync/registration/driver_module.h",
+    executable_format = "vmvx-bytecode-fb",  # As per prompt/assumption
+    #TODO multiple cts instnaciations with executable formats
+    #TODO exclude semaphore_submission
+    labels = [
+        "cts",
+        "driver=local-sync",
+    ],
+    deps = ["//runtime/src/iree/hal/drivers/local_sync/registration"],
 )
