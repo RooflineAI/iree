@@ -14,8 +14,7 @@ func.func @simple_add_onnx(%arg0: !torch.vtensor<[],si64>, %arg1: !torch.vtensor
 // Tests that a function using torch types but not containing any ops is still
 // handled by the torch input pipeline.
 
-// CHECK: util.func public @nop$async
-// CHECK: util.func public @nop(%{{.+}}: !hal.buffer_view) -> !hal.buffer_view
+// CHECK: util.func public @nop(%{{.+}}: tensor<5xf32>) -> tensor<5xf32>
 func.func @nop(%arg0: !torch.vtensor<[5],f32>) -> !torch.vtensor<[5],f32> attributes {torch.assume_strict_symbolic_shapes} {
   return %arg0 : !torch.vtensor<[5],f32>
 }

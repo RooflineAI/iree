@@ -4,7 +4,7 @@
 
 // Verify that we can have IREE ops in the input and the types convert
 // properly.
-// CHECK-LABEL: util.func public @forward$async(%arg0: !hal.buffer_view, %arg1: !hal.fence, %arg2: !hal.fence) -> !hal.buffer_view
+// CHECK-LABEL: util.func public @forward(%arg0: tensor<128x20xf32>) -> tensor<128x30xf32>
 // CHECK: linalg.matmul
 func.func @forward(%arg0: !torch.vtensor<[128,20],f32>) -> !torch.vtensor<[128,30],f32> {
   %_params.classifier.weight = util.global.load @_params.classifier.weight : tensor<30x20xf32>
@@ -29,7 +29,7 @@ util.global private @_params.classifier.bias {inlining_policy = #util.inline.nev
 // -----
 
 // Verify we can decompose complex ops
-// CHECK-LABEL: util.func public @main$async(%arg0: !hal.buffer_view, %arg1: !hal.fence, %arg2: !hal.fence) -> (!hal.buffer_view, !hal.buffer_view)
+// CHECK-LABEL: util.func public @main(%arg0: tensor<2x3x4xf32>) -> (tensor<2x3x4xf32>, tensor<2x3x4xf32>)
 // CHECK: tensor.empty
 func.func @main(%arg0: !torch.vtensor<[2,3,4],f32>) -> (!torch.vtensor<[2,3,4],f32>, !torch.vtensor<[2,3,4],f32>) {
   %int2 = torch.constant.int 2
