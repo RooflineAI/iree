@@ -16,7 +16,8 @@ package(
 string_list_flag(
     name = "enabled_drivers",
     build_setting_default = [
-        "amdgpu",
+        # ROO-487: disabled target
+        # "amdgpu",
         "cuda",
         "local-sync",
         "local-task",
