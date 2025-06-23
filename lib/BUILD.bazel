@@ -30,12 +30,20 @@ iree_compiler_cc_binary(
             "-Wl,--version-script=$(location //compiler/src/iree/compiler/API:api_exports.ld)",
             "-Wl,--no-undefined",
         ],
-        ":macos": [],
+        ":macos": [
+            "-Wl,-exported_symbols_list $(location //compiler/src/iree/compiler/API:api_exports.macos.ld)",
+        ],
     }),
     linkshared = 1,
     deps = [
         "//compiler/bindings/c:headers",
         "//compiler/src/iree/compiler/API:StaticImpl",
-        "//compiler/src/iree/compiler/API:api_exports.ld",
-    ],
+    ] + select({
+        "//conditions:default": [
+            "//compiler/src/iree/compiler/API:api_exports.ld",
+        ],
+        ":macos": [
+            "//compiler/src/iree/compiler/API:api_exports.macos.ld",
+        ],
+    }),
 )
