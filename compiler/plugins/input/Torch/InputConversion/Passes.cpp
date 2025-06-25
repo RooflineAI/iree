@@ -82,7 +82,9 @@ void createTorchToIREEPipeline(
   // differently and would not be subject to inlining.
   pm.addPass(mlir::createInlinerPass());
 
-  pm.addPass(createFuncConversionPass());
+  FuncConversionPassOptions funcOptions;
+  funcOptions.generateAsyncFunctions = options.emitAsyncEntryPoints;
+  pm.addPass(createFuncConversionPass(funcOptions));
   pm.addNestedPass<IREE::Util::FuncOp>(createCanonicalizerPass());
   pm.addPass(createSymbolDCEPass());
 

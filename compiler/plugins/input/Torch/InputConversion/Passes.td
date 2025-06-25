@@ -41,6 +41,12 @@ def FuncConversionPass :
     Conversion pass for finalizing functions and ABI. Replaces the generic
     torch-func-backend-type-conversion pass.
   }];
+  let options = [
+    Option<"generateAsyncFunctions", "generate-async-functions", "bool",
+           /*default=*/"true",
+           "Generate async functions with coarse-fences ABI. "
+           "When false, generates only sync functions.">
+  ];
 }
 
 #endif // IREE_COMPILER_PLUGINS_INPUT_TORCH_INPUTCONVERSION_PASSES

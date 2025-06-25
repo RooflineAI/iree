@@ -35,6 +35,11 @@ struct TorchToIREELoweringPipelineOptions
   Option<bool> decompose{*this, "decompose",
                          llvm::cl::desc("Decompose complex torch operations."),
                          llvm::cl::init(true)};
+  Option<bool> emitAsyncEntryPoints{
+      *this, "emit-async-entry-points",
+      llvm::cl::desc("Generate async functions with coarse-fences ABI. When "
+                     "false (default), generates only sync functions."),
+      llvm::cl::init(false)};
 };
 
 // Creates a pipeline that lowers from the torch backend contract to IREE.

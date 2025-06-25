@@ -28,6 +28,7 @@ namespace {
 struct TorchOptions {
   bool strictSymbolicShapes = true;
   bool decompose = true;
+  bool emitAsyncEntryPoints = false;
   void bindOptions(OptionsBinder &binder) {
     static llvm::cl::OptionCategory category("Torch Input");
     binder.opt<bool>(
@@ -37,6 +38,11 @@ struct TorchOptions {
     binder.opt<bool>("iree-torch-decompose-complex-ops", decompose,
                      llvm::cl::cat(category),
                      llvm::cl::desc("Decompose complex torch operations."));
+    binder.opt<bool>(
+        "iree-torch-emit-async-entry-points", emitAsyncEntryPoints,
+        llvm::cl::cat(category),
+        llvm::cl::desc("Generate async functions with coarse-fences ABI. When "
+                       "false (default), generates only sync functions."));
   }
 };
 
@@ -85,6 +91,7 @@ struct TorchSession
       TorchInput::TorchToIREELoweringPipelineOptions torchOptions;
       torchOptions.strictSymbolicShapes = options.strictSymbolicShapes;
       torchOptions.decompose = options.decompose;
+      torchOptions.emitAsyncEntryPoints = options.emitAsyncEntryPoints;
       TorchInput::createTorchToIREEPipeline(passManager, torchOptions);
       return true;
     }
