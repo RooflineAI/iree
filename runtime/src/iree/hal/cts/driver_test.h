@@ -148,7 +148,6 @@ TEST_F(DriverTest, QueryAndCreateAvailableDevicesByPath) {
 
   // Check creation via empty path if we didn't already.
   if (!tested_empty_path) {
-    iree_string_view_t name = device_infos[0].name;
     CheckCreateDeviceViaPath(device_infos[0].name, iree_string_view_empty());
   }
 

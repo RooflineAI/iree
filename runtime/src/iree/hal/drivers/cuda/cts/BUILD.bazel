@@ -1,0 +1,63 @@
+# Copyright 2023 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:iree_hal_cts_test_suite.bzl", "iree_hal_cts_test_suite")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_hal_cts_test_suite(
+    name = "cts_graph",
+    driver_name = "cuda",
+    variant_suffix = "graph",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/cuda/registration/driver_module.h",
+    driver_registration_fn = "iree_hal_cuda_driver_module_register",
+    compiler_target_backend = "cuda",
+    executable_format = "\"PTXE\"",
+    args = ["--cuda_use_streams=false"],
+    deps = ["//runtime/src/iree/hal/drivers/cuda/registration"],
+    excluded_tests = [
+        # HAL event is unimplemented for now.
+        "event",
+    ],
+    tags = [
+        "driver=cuda",
+        "requires-gpu-nvidia",
+        # CUDA cuInit fails with sanitizer on.
+        "noasan",
+        "nomsan",
+        "notsan",
+        "noubsan",
+    ],
+)
+
+iree_hal_cts_test_suite(
+    name = "cts_stream",
+    driver_name = "cuda",
+    variant_suffix = "stream",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/cuda/registration/driver_module.h",
+    driver_registration_fn = "iree_hal_cuda_driver_module_register",
+    compiler_target_backend = "cuda",
+    executable_format = "\"PTXE\"",
+    args = ["--cuda_use_streams=true"],
+    deps = ["//runtime/src/iree/hal/drivers/cuda/registration"],
+    excluded_tests = [
+        # HAL event is unimplemented for now.
+        "event",
+    ],
+    tags = [
+        "driver=cuda",
+        "requires-gpu-nvidia",
+        # CUDA cuInit fails with sanitizer on.
+        "noasan",
+        "nomsan",
+        "notsan",
+        "noubsan",
+    ],
+)

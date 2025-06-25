@@ -1,0 +1,64 @@
+load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+# Export the template file for test generation
+exports_files(["cts_test_template.cc.in"])
+
+# List of all CTS test names (mirroring CMake variables)
+CTS_ALL_TESTS = [
+    "allocator",
+    "buffer_mapping",
+    "command_buffer",
+    "command_buffer_copy_buffer",
+    "command_buffer_dispatch",
+    "command_buffer_dispatch_constants",
+    "command_buffer_fill_buffer",
+    "command_buffer_update_buffer",
+    "driver",
+    "event",
+    "executable_cache",
+    "file",
+    "semaphore",
+    "semaphore_submission",
+]
+
+CTS_EXECUTABLE_TESTS = [
+    "command_buffer_dispatch",
+    "command_buffer_dispatch_constants",
+    "executable_cache",
+]
+
+CTS_EXECUTABLE_SOURCES = [
+    "command_buffer_dispatch_test",
+    "command_buffer_dispatch_constants_test",
+    "executable_cache_test",
+]
+
+iree_runtime_cc_library(
+    name = "cts_test_base",
+    testonly = True,
+    hdrs = ["cts_test_base.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+# Generate test libraries for each test type
+[iree_runtime_cc_library(
+    name = test_name + "_test_library",
+    testonly = True,
+    hdrs = [test_name + "_test.h"],
+    deps = [
+        ":cts_test_base",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+    ],
+) for test_name in CTS_ALL_TESTS]
