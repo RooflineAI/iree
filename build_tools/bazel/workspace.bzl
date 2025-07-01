@@ -29,7 +29,7 @@ def cuda_auto_configure_impl(repository_ctx):
     if script_file:
         # Only support Linux and Windows.
         # (Assuming repository_ctx.os.name returns a lowercase string like "linux" or "windows".)
-        if repository_ctx.os.arch.lower() not in ["x86_64"] or repository_ctx.os.name.lower() not in ["linux", "windows"]:
+        if repository_ctx.os.arch.lower() not in ["amd64"] or repository_ctx.os.name.lower() not in ["linux", "windows"]:
             repository_ctx.file("BUILD", """
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 package(default_visibility = ["//visibility:public"])
