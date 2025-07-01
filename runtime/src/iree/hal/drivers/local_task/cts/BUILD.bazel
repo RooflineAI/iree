@@ -1,0 +1,59 @@
+# Copyright 2022 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:iree_hal_cts_test_suite.bzl", "iree_hal_cts_test_suite")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+# Filter out tests that are known to fail on local-task driver
+_FILTERED_TESTS = [
+    "SemaphoreTest.WaitThenFail",
+    "SemaphoreTest.FailThenWait",
+    "SemaphoreTest.MultiWaitThenFail",
+    "SemaphoreTest.DeviceMultiWaitThenFail",
+    "SemaphoreSubmissionTest.PropagateFailSignal",
+]
+
+_FILTER_ARGS = ["--gtest_filter=-{}".format(":".join(_FILTERED_TESTS))]
+
+# Local-task driver with embedded ELF executable loader
+iree_hal_cts_test_suite(
+    name = "cts_embedded_elf",
+    driver_name = "local-task",
+    variant_suffix = "embedded-elf",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/local_task/registration/driver_module.h",
+    driver_registration_fn = "iree_hal_local_task_driver_module_register",
+    compiler_target_backend = "llvm-cpu",
+    executable_format = "\"embedded-elf-\" IREE_ARCH",
+    compiler_flags = ["--iree-llvmcpu-target-cpu=generic"],
+    args = _FILTER_ARGS,
+    deps = ["//runtime/src/iree/hal/drivers/local_task/registration"],
+    tags = [
+        "driver=local-task",
+        "requires-executable-loader-embedded-elf",
+    ],
+)
+
+# Local-task driver with VMVX module loader
+iree_hal_cts_test_suite(
+    name = "cts_vmvx",
+    driver_name = "local-task",
+    variant_suffix = "vmvx",
+    driver_registration_hdr = "runtime/src/iree/hal/drivers/local_task/registration/driver_module.h",
+    driver_registration_fn = "iree_hal_local_task_driver_module_register",
+    compiler_target_backend = "vmvx",
+    executable_format = "\"vmvx-bytecode-fb\"",
+    args = _FILTER_ARGS,
+    deps = ["//runtime/src/iree/hal/drivers/local_task/registration"],
+    tags = [
+        "driver=local-task",
+        "requires-executable-loader-vmvx-module",
+    ],
+)
