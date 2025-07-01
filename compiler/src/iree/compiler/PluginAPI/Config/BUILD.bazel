@@ -12,6 +12,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+# Switch plugin registration on mac OS, disable certain plugins
+config_setting(
+    name = "macos",
+    constraint_values = [
+        "@platforms//os:osx",
+    ],
+)
+
 genrule(
     name = "StaticLinkedPlugins_inc__generate",
     outs = ["StaticLinkedPlugins.inc"],
@@ -22,18 +30,23 @@ genrule(
         "echo '" +
         "HANDLE_PLUGIN_ID(roofexplorer)\n" +
         "HANDLE_PLUGIN_ID(roofqx)\n" +
-        "HANDLE_PLUGIN_ID(hal_target_cellar_cuda)\n" +
-        "HANDLE_PLUGIN_ID(hal_target_cuda)\n" +
         "HANDLE_PLUGIN_ID(hal_target_llvm_cpu)\n" +
         "HANDLE_PLUGIN_ID(hal_target_cellar_cpu)\n" +
         "HANDLE_PLUGIN_ID(hal_target_local)\n" +
         "HANDLE_PLUGIN_ID(hal_target_metal_spirv)\n" +
-        "HANDLE_PLUGIN_ID(hal_target_rocm)\n" +
         "HANDLE_PLUGIN_ID(hal_target_vmvx)\n" +
         "HANDLE_PLUGIN_ID(hal_target_vulkan_spirv)\n" +
         "HANDLE_PLUGIN_ID(input_tosa)\n" +
         "HANDLE_PLUGIN_ID(input_stablehlo)\n" +
         "HANDLE_PLUGIN_ID(input_torch)\n" +
+        select({
+            "//conditions:default":
+                "HANDLE_PLUGIN_ID(hal_target_cellar_cuda)\n" +
+                "HANDLE_PLUGIN_ID(hal_target_cuda)\n" +
+                # FIXME for some reason ROCM errors on macOs
+                "HANDLE_PLUGIN_ID(hal_target_rocm)\n",
+            ":macos": ""
+        }) +
         # Samples
         "HANDLE_PLUGIN_ID(example)\n" +
         "HANDLE_PLUGIN_ID(simple_io_sample)\n" +
@@ -54,13 +67,10 @@ iree_compiler_cc_library(
         # For now, we just hard include all in-tree plugins.
         "@patio//roofexplorer:registration",
         "@patio//roofqx:registration",
-        "@patio//target/CellarCUDA:CellarCUDA",
         "@patio//target/CellarCPU:CellarCPU",
-        "//compiler/plugins/target/CUDA",
         "//compiler/plugins/target/LLVMCPU",
         "//compiler/plugins/target/Local",
         "//compiler/plugins/target/MetalSPIRV",
-        "//compiler/plugins/target/ROCM",
         "//compiler/plugins/target/VMVX",
         "//compiler/plugins/target/VulkanSPIRV",
         "//compiler/plugins/input/StableHLO:registration",
@@ -68,5 +78,13 @@ iree_compiler_cc_library(
         "//compiler/plugins/input/Torch:registration",
         "//samples/compiler_plugins/example:registration",
         "//samples/compiler_plugins/simple_io_sample:registration",
-    ],
+    ] + select({
+        "//conditions:default": [
+            "@patio//target/CellarCUDA:CellarCUDA",
+            "//compiler/plugins/target/CUDA",
+            # FIXME for some reason ROCM errors on macOs
+            "//compiler/plugins/target/ROCM",
+        ],
+        ":macos": []
+    }),
 )

@@ -155,8 +155,9 @@ build:generic_clang --copt=-Wunused-comparison
 build:generic_clang --copt=-Wvla
 
 # Treat backrefs during linking as errors.
-build:generic_clang --linkopt=-Wl,--warn-backrefs
-build:generic_clang --linkopt=-Wl,--fatal-warnings
+# FIXME re-enable this, requires -fuse-ld=lld and lld being installed
+# build:generic_clang --linkopt=-Wl,--warn-backrefs
+# build:generic_clang --linkopt=-Wl,--fatal-warnings
 
 ###############################################################################
 # Additional options for MacOS based clang builds.
@@ -166,6 +167,10 @@ build:generic_clang --linkopt=-Wl,--fatal-warnings
 
 build:macos_clang --config=generic_clang
 build:macos_clang --per_file_copt=utils@-Wno-range-loop-analysis
+
+# FIXME build on mac OS fails on aligned allocation in nanobind
+build:macos_clang --copt=-fno-aligned-allocation
+build:macos_clang --linkopt=-Wl,-undefined,dynamic_lookup
 
 build:macos_clang_release --config=macos_clang
 build:macos_clang_release --per_file_copt=utils@-Wno-range-loop-analysis

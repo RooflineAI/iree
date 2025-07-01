@@ -12,19 +12,38 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+# Switch link options on mac OS
+config_setting(
+    name = "macos",
+    constraint_values = [
+        "@platforms//os:osx",
+    ],
+)
+
 iree_compiler_cc_binary(
     name = "libIREECompiler.so",
     srcs = [
         "//compiler/src/iree/compiler/API:api_exports.c",
     ],
-    linkopts = [
-        "-Wl,--version-script=$(location //compiler/src/iree/compiler/API:api_exports.ld)",
-        "-Wl,--no-undefined",
-    ],
+    linkopts = select({
+        "//conditions:default": [
+            "-Wl,--version-script=$(location //compiler/src/iree/compiler/API:api_exports.ld)",
+            "-Wl,--no-undefined",
+        ],
+        ":macos": [
+            "-Wl,-exported_symbols_list $(location //compiler/src/iree/compiler/API:api_exports.macos.ld)",
+        ],
+    }),
     linkshared = 1,
     deps = [
         "//compiler/bindings/c:headers",
         "//compiler/src/iree/compiler/API:StaticImpl",
-        "//compiler/src/iree/compiler/API:api_exports.ld",
-    ],
+    ] + select({
+        "//conditions:default": [
+            "//compiler/src/iree/compiler/API:api_exports.ld",
+        ],
+        ":macos": [
+            "//compiler/src/iree/compiler/API:api_exports.macos.ld",
+        ],
+    }),
 )

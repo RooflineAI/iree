@@ -22,7 +22,7 @@ dependencies and is very invasive.
 Instead, once we have our list of symbols, we generate:
 
 * api_exports.ld : A GNU-style linker script for setting up exports.
-* api_exports.lst : A MacOS-style file suitable to pass to
+* api_exports.macos.ld : A MacOS-style file suitable to pass to
   --exported_symbols_list
 * api_exports.def : A Windows def file.
 * api_exports.c : Source file that triggers extern resolution for the symbols
@@ -35,8 +35,8 @@ documented in the source control system (vs automagically/opaquely at a low
 level of the build).
 """
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import List
 
 LOCAL_HEADER_FILES = [
@@ -131,7 +131,7 @@ def main(repo_root: Path, api_root: Path):
 
     # Generate.
     export_symbols.sort()
-    generate_macos_symbol_list(export_symbols, api_root / "api_exports.macos.lst")
+    generate_macos_symbol_list(export_symbols, api_root / "api_exports.macos.ld")
     generate_linker_script(export_symbols, api_root / "api_exports.ld")
     generate_def_file(export_symbols, api_root / "api_exports.def")
     generate_force_extern(export_symbols, api_root / "api_exports.c")

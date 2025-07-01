@@ -17,7 +17,7 @@ exports_files([
     "api_exports.c",
     "api_exports.def",
     "api_exports.ld",
-    "api_exports.lst",
+    "api_exports.macos.ld",
 ])
 
 # IMPORTANT: If modifying the list of dependencies, mirror the changes
