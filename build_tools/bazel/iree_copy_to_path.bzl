@@ -1,7 +1,7 @@
 load("@with_cfg.bzl", "with_cfg")
 
 def copy_to_path(name, src, output_dir, file_name, *args, **kwargs):
-    output_path = output_dir + "/" + file_name
+    output_path = (output_dir + "/" + file_name) if output_dir else file_name
     native.genrule(
         name = name,
         srcs = [src],
