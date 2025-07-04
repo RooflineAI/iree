@@ -53,7 +53,7 @@ iree_compiler_cc_library(
 iree_compiler_cc_library(
     name = "SharedImpl",
     srcs = [
-        "//lib:libIREECompiler.so",
+        "//lib:libIREECompiler",
     ],
     tags = ["skip-bazel_to_cmake"],
 )

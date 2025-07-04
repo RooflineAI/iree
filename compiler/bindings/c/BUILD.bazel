@@ -48,7 +48,7 @@ cc_test(
         "$(WORKSPACE_ROOT)/lib/libIREECompiler.so",
     ],
     data = [
-        "//lib:libIREECompiler.so",
+        "//lib:libIREECompiler",
     ],
     tags = ["skip-bazel_to_cmake"],
     deps = [
