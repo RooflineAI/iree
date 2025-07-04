@@ -293,4 +293,20 @@ iree_cc_library(
   PUBLIC
 )
 
+iree_cc_library(
+  NAME
+    external_timepoint_poller
+  HDRS
+    "external_timepoint_poller.h"
+  SRCS
+    "external_timepoint_poller.c"
+  DEPS
+    iree::base
+    iree::base::internal::synchronization
+    iree::base::internal::threading
+    iree::base::internal::wait_handle
+    iree::hal
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

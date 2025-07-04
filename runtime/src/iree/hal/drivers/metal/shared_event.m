@@ -277,7 +277,35 @@ iree_status_t iree_hal_metal_shared_event_multi_wait(
 static iree_status_t iree_hal_metal_shared_event_import_timepoint(
     iree_hal_semaphore_t* base_semaphore, uint64_t value, iree_hal_queue_affinity_t queue_affinity,
     iree_hal_external_timepoint_t external_timepoint) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED, "timepoint import is not yet implemented");
+  printf("CALLED METAL IMPORT TIMEPOINT\n");
+  IREE_TRACE_ZONE_BEGIN(z0);
+
+  // Only support wait primitive external timepoints
+  if (external_timepoint.type != IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Metal shared events only support importing WAIT_PRIMITIVE timepoints");
+  }
+
+  // Convert the external timepoint to a wait handle
+  iree_wait_handle_t wait_handle;
+  iree_wait_handle_wrap_primitive(external_timepoint.handle.wait_primitive.type,
+                                  external_timepoint.handle.wait_primitive.value, &wait_handle);
+
+  // Check if the external timepoint is already signaled
+  if (iree_wait_handle_is_immediate(wait_handle)) {
+    // External timepoint is already ready - signal our semaphore immediately
+    IREE_TRACE_ZONE_END(z0);
+    return iree_hal_metal_shared_event_signal(base_semaphore, value);
+  }
+
+  // Add the import to the global external timepoint poller
+  // The poller will signal our semaphore when the external timepoint becomes ready
+  iree_status_t status =
+      iree_hal_external_timepoint_import_global(base_semaphore, value, wait_handle);
+
+  IREE_TRACE_ZONE_END(z0);
+  return status;
 }
 
 static iree_status_t iree_hal_metal_shared_event_export_timepoint(
@@ -285,7 +313,73 @@ static iree_status_t iree_hal_metal_shared_event_export_timepoint(
     iree_hal_external_timepoint_type_t requested_type,
     iree_hal_external_timepoint_flags_t requested_flags,
     iree_hal_external_timepoint_t* IREE_RESTRICT out_external_timepoint) {
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED, "timepoint export is not yet implemented");
+  printf("CALLED METAL EXPORT TIMEPOINT\n");
+  // Clear the output structure first
+  memset(out_external_timepoint, 0x00, sizeof(*out_external_timepoint));
+
+  // Metal shared events can be exported as wait primitives
+  if ((requested_type & IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE) == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Metal shared events only support exporting WAIT_PRIMITIVE timepoints");
+  }
+
+  iree_hal_metal_shared_event_t* semaphore = iree_hal_metal_shared_event_cast(base_semaphore);
+  IREE_TRACE_ZONE_BEGIN(z0);
+
+  // Check if the semaphore is in a failed state
+  uint64_t current_value = semaphore->shared_event.signaledValue;
+  if (IREE_UNLIKELY(current_value >= IREE_HAL_SEMAPHORE_FAILURE_VALUE)) {
+    iree_status_t status = iree_ok_status();
+    iree_slim_mutex_lock(&semaphore->state_mutex);
+    status = semaphore->failure_state;
+    iree_slim_mutex_unlock(&semaphore->state_mutex);
+    IREE_TRACE_ZONE_END(z0);
+    return status;
+  }
+
+  // Check if the timepoint has already been reached
+  if (current_value >= value) {
+    // Timepoint already reached - return an immediate wait primitive
+    out_external_timepoint->type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE;
+    out_external_timepoint->flags = requested_flags;
+    out_external_timepoint->compatibility =
+        IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT | IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT;
+    out_external_timepoint->handle.wait_primitive = iree_wait_primitive_immediate();
+    IREE_TRACE_ZONE_END(z0);
+    return iree_ok_status();
+  }
+
+  // Create a platform-native wait primitive that will be signaled when the timepoint is reached
+  iree_wait_handle_t wait_handle = iree_wait_handle_immediate();
+  iree_status_t status = iree_wait_primitive_create_native(false, &wait_handle);
+  if (!iree_status_is_ok(status)) {
+    IREE_TRACE_ZONE_END(z0);
+    return status;
+  }
+
+  // Use Metal's notification system to signal our wait primitive when the value is reached
+  // We need to capture the wait handle in the block, so we'll need to retain it appropriately
+  __block iree_wait_handle_t captured_handle = wait_handle;
+  [semaphore->shared_event notifyListener:semaphore->event_listener
+                                  atValue:value
+                                    block:^(id<MTLSharedEvent> se, uint64_t v) {
+                                      // Signal the wait primitive when the timepoint is reached
+                                      // Note: we ignore errors here as there's no good way to
+                                      // propagate them and the wait primitive being signaled is the
+                                      // important part
+                                      iree_wait_primitive_write(&captured_handle);
+                                    }];
+
+  // Fill the external timepoint structure
+  out_external_timepoint->type = IREE_HAL_EXTERNAL_TIMEPOINT_TYPE_WAIT_PRIMITIVE;
+  out_external_timepoint->flags = requested_flags;
+  out_external_timepoint->compatibility =
+      IREE_HAL_SEMAPHORE_COMPATIBILITY_HOST_WAIT | IREE_HAL_SEMAPHORE_COMPATIBILITY_DEVICE_WAIT;
+  out_external_timepoint->handle.wait_primitive.type = wait_handle.type;
+  out_external_timepoint->handle.wait_primitive.value = wait_handle.value;
+
+  IREE_TRACE_ZONE_END(z0);
+  return iree_ok_status();
 }
 
 static const iree_hal_semaphore_vtable_t iree_hal_metal_shared_event_vtable = {
