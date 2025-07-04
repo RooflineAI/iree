@@ -27,6 +27,7 @@
 #include "iree/hal/drivers/vulkan/native_semaphore.h"
 #include "iree/hal/drivers/vulkan/nop_executable_cache.h"
 #include "iree/hal/drivers/vulkan/status_util.h"
+#include "iree/hal/drivers/vulkan/timepoint_bridge.h"
 #include "iree/hal/drivers/vulkan/tracing.h"
 #include "iree/hal/drivers/vulkan/util/arena.h"
 #include "iree/hal/drivers/vulkan/util/ref_ptr.h"
@@ -536,6 +537,8 @@ typedef struct iree_hal_vulkan_device_t {
 
   BuiltinExecutables* builtin_executables;
 
+  iree_hal_vulkan_timepoint_bridge_t timepoint_bridge;
+
 #if defined(IREE_HAL_VULKAN_HAVE_RENDERDOC)
   RENDERDOC_API_LATEST* renderdoc_api;
 #endif  // IREE_HAL_VULKAN_HAVE_RENDERDOC
@@ -685,6 +688,10 @@ static iree_status_t iree_hal_vulkan_device_initialize_command_queues(
   return iree_ok_status();
 }
 
+static iree_status_t iree_hal_vulkan_device_create_semaphore(
+    iree_hal_device_t* base_device, uint64_t initial_value,
+    iree_hal_semaphore_flags_t flags, iree_hal_semaphore_t** out_semaphore);
+
 static iree_status_t iree_hal_vulkan_device_create_internal(
     iree_hal_driver_t* driver, iree_string_view_t identifier,
     iree_hal_vulkan_features_t enabled_features,
@@ -730,6 +737,10 @@ static iree_status_t iree_hal_vulkan_device_create_internal(
   device->physical_device = physical_device;
   device->logical_device = logical_device;
   device->logical_device->AddReference();
+
+  iree_hal_vulkan_timepoint_bridge_initialize(host_allocator,
+                                            &device->timepoint_bridge);
+                                            device->logical_device
 
 #if defined(IREE_HAL_VULKAN_HAVE_RENDERDOC)
   device->renderdoc_api = iree_hal_vulkan_query_renderdoc_api(instance);
@@ -791,6 +802,18 @@ static iree_status_t iree_hal_vulkan_device_create_internal(
   }
 
   if (iree_status_is_ok(status)) {
+    iree_hal_semaphore_t* wake_event = NULL;
+    iree_hal_vulkan_device_create_semaphore((iree_hal_device_t*)device, 0,
+                                            IREE_HAL_SEMAPHORE_FLAG_NONE,
+                                            &wake_event);
+    iree_hal_vulkan_timepoint_bridge_initialize(
+        host_allocator, wake_event,
+        &iree_hal_vulkan_native_semaphore_multi_wait_any,
+        &device->timepoint_bridge);
+    iree_hal_semaphore_release(wake_event);
+    // device->logical_device
+    iree_hal_vulkan_timepoint_bridge_create(&device->timepoint_bridge);
+
     *out_device = (iree_hal_device_t*)device;
   } else {
     iree_hal_device_destroy((iree_hal_device_t*)device);
@@ -802,6 +825,11 @@ static void iree_hal_vulkan_device_destroy(iree_hal_device_t* base_device) {
   iree_hal_vulkan_device_t* device = iree_hal_vulkan_device_cast(base_device);
   iree_allocator_t host_allocator = iree_hal_device_host_allocator(base_device);
   IREE_TRACE_ZONE_BEGIN(z0);
+
+  iree_hal_vulkan_timepoint_bridge_request_exit(&device->timepoint_bridge);
+
+  iree_hal_vulkan_timepoint_bridge_destroy(&device->timepoint_bridge);
+  iree_hal_vulkan_timepoint_bridge_free(&device->timepoint_bridge);
 
   // Drop all command queues. These may wait until idle in their destructor.
   for (iree_host_size_t i = 0; i < device->queue_count; ++i) {
